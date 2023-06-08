@@ -50,17 +50,37 @@ struct Stamp
   fftSize::Int32
 
   """
-  The first post-FFT channel that we extracted.  So column "zero" in `data`
+  The first post-FFT channel that we extracted.  So the first column in `data`
   corresponds to this column in the original post-FFT data.  This will not
-  exactly match `startChannel`` in a hit, because we combine adjacent hits and
-  may use different window sizes. But if you consider the intervals
-  `[startChannel, startChannel + numChannels)`, the interval for the stamp
-  should overlap with the interval for any relevant hits.
+  exactly match startChannel in a hit, because we combine adjacent hits and may
+  use different window sizes. But if you consider the intervals [startChannel,
+  startChannel + numChannels), the interval for the stamp should overlap with
+  the interval for any relevant hits.
 
   !!! note
       Currently zero based!
   """
   startChannel::Int32
+
+  """
+  Metadata for the best hit we found for this stamp.
+  Not populated for stamps extracted with the `seticore` CLI tool.
+  """
+  signal::Signal
+
+  """
+  Where the raw file starts in the complete input band (e.g. in the beamforming
+  recipe).  Metadata copied from the input RAW file.  Needed to match up this
+  stamp to the beamforming recipe file.
+  """
+  schan::Int32
+
+  """
+  `OBSID` (OBServation ID) field from the input RAW file.  Metadata copied from
+  the input raw file.  Needed to match up this stamp to the beamforming recipe
+  file.
+  """
+  obsid::String
 
   # Dimensions of the data
   numTimesteps::Int32
@@ -82,7 +102,7 @@ Construct a `Stamp` from capnp object `s`.
 function Stamp(s)
     ntime = pyconvert(Int32, s.numTimesteps)
     nchan = pyconvert(Int32, s.numChannels)
-    npol  = pyconvert(Int32, s.numPolarities)
+    npol  = pyconvert(Int32, s.numPolarizations)
     nant  = pyconvert(Int32, s.numAntennas)
     datavec = pyconvert(Vector{Float32}, pylist(s.data))
     datavecz = reinterpret(Complex{Float32}, datavec)
@@ -101,6 +121,9 @@ function Stamp(s)
         pyconvert(Int32,   s.coarseChannel),
         pyconvert(Int32,   s.fftSize),
         pyconvert(Int32,   s.startChannel),
+        Signal(s.signal),
+        pyconvert(Int32,   s.schan),
+        pyconvert(String,  s.obsid),
         ntime,
         nchan,
         npol,
@@ -114,7 +137,13 @@ end
 Load the `Stamp`s from the given `filename` and return as a `DataFrame`.
 """
 function load_stamps(stamps_filename)
-    open(stamps_filename) do io
+    df = open(stamps_filename) do io
         [Stamp(s) for s in SeticoreCapnp.CapnpStamp[].Stamp.read_multiple(io)]
     end |> DataFrame
+    # Store the Signal fields as additional columns, omitting redundant
+    # `coarseChannel` and `numTimesteps` fields.
+    sigdf = DataFrame(df.signal)
+    select!(df, Not(:signal))
+    select!(sigdf, Not([:coarseChannel, :numTimesteps]))
+    hcat(df, sigdf, makeunique=true)
 end

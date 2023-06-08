@@ -18,7 +18,8 @@ struct Signal
     index::Int32
   
     """
-    How many bins the hit drifts over
+    How many bins the hit drifts over.  This counts the drift distance over the
+    full rounded-up power-of-two time range.
     """
     driftSteps::Int32
   
@@ -29,6 +30,9 @@ struct Signal
   
     """
     The signal-to-noise ratio for the hit
+    ```
+    snr = (power - median) / stdev
+    ````
     """
     snr::Float32
   
@@ -38,9 +42,28 @@ struct Signal
     coarseChannel::Int32
   
     """
-    Which beam this hit is in. -1 for incoherent beam
+    Which beam this hit is in. -1 for incoherent beam, or no beam
     """
     beam::Int32
+
+    """
+    The number of timesteps in the associated filterbank.
+    This does *not* use rounded-up-to-a-power-of-two timesteps.
+    """
+    numTimesteps::Int32
+
+    """
+    The total power that is normalized to calculate snr.
+    ```
+    snr = (power - median) / stdev
+    ````
+    """
+    power::Float32
+
+    """
+    # The total power for the same signal, calculated incoherently.
+    """
+    incoherentPower::Float32
 end
 
 """
@@ -55,7 +78,10 @@ function Signal(s)
         pyconvert(Float64, s.driftRate),
         pyconvert(Float32, s.snr),
         pyconvert(Int32,   s.coarseChannel),
-        pyconvert(Int32,   s.beam)
+        pyconvert(Int32,   s.beam),
+        pyconvert(Int32,   s.numTimesteps),
+        pyconvert(Float32, s.power),
+        pyconvert(Float32, s.incoherentPower),
     )
 end
 
@@ -87,7 +113,7 @@ struct Filterbank
     # Column zero in the data corresponds to this column in the whole coarse channel
     startChannel::Int32
 
-    # Which beam this data is from. -1 for incoherent beam
+    # Which beam this data is from. -1 for incoherent beam, or no beam
     beam::Int32
 end
 
@@ -150,6 +176,11 @@ function load_hits(hits_filename)
     end
     sdf = DataFrame(getproperty.(hits, :signal))
     fdf = DataFrame(getproperty.(hits, :filterbank))
+    # Omit redundant numTimesteps field from Signal rather than Filterbank
+    # because it was added to Signal after it was part of Filterbank so some
+    # hits files will not have Signal.numTimesteps.
     # Omit redundant coarseChannel and beam fields from Filterbank
-    hcat(sdf, fdf[!, Not([:coarseChannel, :beam])], makeunique=true)
+    select!(sdf, Not(:numTimesteps))
+    select!(fdf, Not([:coarseChannel, :beam]))
+    hcat(sdf, fdf, makeunique=true)
 end

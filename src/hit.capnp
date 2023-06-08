@@ -16,7 +16,8 @@ struct Signal {
   # This is relative to the coarse channel.
   index @1 :Int32;
 
-  # How many bins the hit drifts over
+  # How many bins the hit drifts over.
+  # This counts the drift distance over the full rounded-up power-of-two time range.
   driftSteps @2 :Int32;
 
   # The drift rate in Hz/s
@@ -28,8 +29,19 @@ struct Signal {
   # Which coarse channel this hit is in
   coarseChannel @5 :Int32;
 
-  # Which beam this hit is in. -1 for incoherent beam
+  # Which beam this hit is in. -1 for incoherent beam, or no beam
   beam @6 :Int32;
+
+  # The number of timesteps in the associated filterbank.
+  # This does *not* use rounded-up-to-a-power-of-two timesteps.
+  numTimesteps @7 :Int32;
+
+  # The total power that is normalized to calculate snr.
+  # snr = (power - median) / stdev
+  power @8 :Float32;
+
+  # The total power for the same signal, calculated incoherently.
+  incoherentPower @9 :Float32;
 }
 
 # The Filterbank contains a smaller slice of the larger filterbank that we originally
@@ -37,12 +49,12 @@ struct Signal {
 struct Filterbank {
   # These fields are like the ones found in FBH5 files.
   sourceName @0 :Text;
-  fch1 @1 :Float64;
-  foff @2 :Float64;
+  fch1 @1 :Float64;   # MHz
+  foff @2 :Float64;   # MHz
   tstart @3 :Float64;
   tsamp @4 :Float64;
-  ra @5 :Float64;  # Hours
-  dec @6 :Float64; # Degrees
+  ra @5 :Float64;     # Hours
+  dec @6 :Float64;    # Degrees
   telescopeId @7 :Int32;
   numTimesteps @8 :Int32;
   numChannels @9 :Int32;
@@ -60,7 +72,7 @@ struct Filterbank {
   # Column zero in the data corresponds to this column in the whole coarse channel
   startChannel @12 :Int32;
 
-  # Which beam this data is from. -1 for incoherent beam
+  # Which beam this data is from. -1 for incoherent beam, or no beam
   beam @13 :Int32;
 }
 
