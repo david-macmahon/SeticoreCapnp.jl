@@ -1,9 +1,9 @@
 # Juliafication of hit.capnp
 
 """
-The `Signal`` struct contains information about a linear signal we found.
-Some of this is redundant if the `Filterbank`` is present, so that the `Signal`
-is still useful on its own.
+The `Signal` struct contains information about a linear signal we found.  Some
+of this is redundant if the `Filterbank` is present, so that the `Signal` is
+still useful on its own.
 """
 struct Signal
     """
