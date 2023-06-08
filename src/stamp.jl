@@ -134,7 +134,9 @@ end
 
 """
     load_stamps(filename) -> DataFrame
-Load the `Stamp`s from the given `filename` and return as a `DataFrame`.
+Load the `Stamp`s from the given `filename` and return the metadata fields as a
+`DataFrame` and the Stamp `data` fields as a `Vector{Array}` whose elements
+correspond one-to-one with the rows of the metadata DataFrame.
 """
 function load_stamps(stamps_filename)
     df = open(stamps_filename) do io
@@ -142,8 +144,9 @@ function load_stamps(stamps_filename)
     end |> DataFrame
     # Store the Signal fields as additional columns, omitting redundant
     # `coarseChannel` and `numTimesteps` fields.
+    data = df.data
     sigdf = DataFrame(df.signal)
-    select!(df, Not(:signal))
+    select!(df, Not([:data, :signal]))
     select!(sigdf, Not([:coarseChannel, :numTimesteps]))
-    hcat(df, sigdf, makeunique=true)
+    hcat(df, sigdf, makeunique=true), data
 end

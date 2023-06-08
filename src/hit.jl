@@ -167,8 +167,11 @@ function Hit(h)
 end
 
 """
-    load_hits(filename) -> DataFrame
-Load the `Hit`s from the given `filename` and return as a `DataFrame`.
+    load_hits(filename) -> meta::DataFrame, data::Vector{Array}
+
+Load the `Hit`s from the given `filename` and return the metadata fields as a
+`DataFrame` and the "Filterbank" waterfall data as a `Vector{Array}` whose
+elements correspond one-to-one with the rows of the metadata DataFrame.
 """
 function load_hits(hits_filename)
     hits = open(hits_filename) do io
@@ -180,7 +183,8 @@ function load_hits(hits_filename)
     # because it was added to Signal after it was part of Filterbank so some
     # hits files will not have Signal.numTimesteps.
     # Omit redundant coarseChannel and beam fields from Filterbank
+    data = fdf.data
     select!(sdf, Not(:numTimesteps))
-    select!(fdf, Not([:coarseChannel, :beam]))
-    hcat(sdf, fdf, makeunique=true)
+    select!(fdf, Not([:data, :coarseChannel, :beam]))
+    hcat(sdf, fdf, makeunique=true), data
 end
