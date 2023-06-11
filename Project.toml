@@ -1,7 +1,7 @@
 name = "SeticoreCapnp"
 uuid = "5f96b823-c651-45d3-b54e-600e338e6562"
 authors = ["David MacMahon <davidm@astro.berkeley.edu> and contributors"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
