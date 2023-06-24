@@ -167,15 +167,17 @@ function Hit(h)
 end
 
 """
-    load_hits(filename) -> meta::DataFrame, data::Vector{Array}
+    load_hits(filename; kwargs...) -> meta::DataFrame, data::Vector{Array}
 
 Load the `Hit`s from the given `filename` and return the metadata fields as a
 `DataFrame` and the "Filterbank" waterfall data as a `Vector{Array}` whose
-elements correspond one-to-one with the rows of the metadata DataFrame.
+elements correspond one-to-one with the rows of the metadata DataFrame.  The
+only supported `kwargs` is `traversal_limit_in_words` which sets the maximmum
+size of a hit.  It default it 2^30 words.
 """
-function load_hits(hits_filename)
+function load_hits(hits_filename; traversal_limit_in_words=2^30)
     hits = open(hits_filename) do io
-        [Hit(h) for h in SeticoreCapnp.CapnpHit[].Hit.read_multiple(io)]
+        [Hit(h) for h in SeticoreCapnp.CapnpHit[].Hit.read_multiple(io; traversal_limit_in_words)]
     end
     sdf = DataFrame(getproperty.(hits, :signal))
     fdf = DataFrame(getproperty.(hits, :filterbank))

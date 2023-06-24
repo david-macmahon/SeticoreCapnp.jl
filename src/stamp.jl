@@ -134,13 +134,16 @@ end
 
 """
     load_stamps(filename) -> DataFrame
+
 Load the `Stamp`s from the given `filename` and return the metadata fields as a
 `DataFrame` and the Stamp `data` fields as a `Vector{Array}` whose elements
-correspond one-to-one with the rows of the metadata DataFrame.
+correspond one-to-one with the rows of the metadata DataFrame.  The only
+supported `kwargs` is `traversal_limit_in_words` which sets the maximmum size of
+a stamp.  It default it 2^30 words.
 """
-function load_stamps(stamps_filename)
+function load_stamps(stamps_filename; traversal_limit_in_words=2^30)
     df = open(stamps_filename) do io
-        [Stamp(s) for s in SeticoreCapnp.CapnpStamp[].Stamp.read_multiple(io)]
+        [Stamp(s) for s in SeticoreCapnp.CapnpStamp[].Stamp.read_multiple(io; traversal_limit_in_words)]
     end |> DataFrame
     # Store the Signal fields as additional columns, omitting redundant
     # `coarseChannel` and `numTimesteps` fields.
