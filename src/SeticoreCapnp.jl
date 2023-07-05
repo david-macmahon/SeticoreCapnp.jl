@@ -3,11 +3,11 @@ module SeticoreCapnp
 export load_hits
 export load_stamps
 
-using PythonCall
+using PyCall
 using DataFrames
 
-const CapnpHit = Ref{Py}()
-const CapnpStamp = Ref{Py}()
+const CapnpHit = Ref{PyObject}()
+const CapnpStamp = Ref{PyObject}()
 
 function __init__()
     capnp = pyimport("capnp")

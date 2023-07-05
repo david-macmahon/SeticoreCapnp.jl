@@ -100,30 +100,30 @@ end
 Construct a `Stamp` from capnp object `s`.
 """
 function Stamp(s)
-    ntime = pyconvert(Int32, s.numTimesteps)
-    nchan = pyconvert(Int32, s.numChannels)
-    npol  = pyconvert(Int32, s.numPolarizations)
-    nant  = pyconvert(Int32, s.numAntennas)
-    datavec = pyconvert(Vector{Float32}, pylist(s.data))
+    ntime = convert(Int32, s.numTimesteps)
+    nchan = convert(Int32, s.numChannels)
+    npol  = convert(Int32, s.numPolarizations)
+    nant  = convert(Int32, s.numAntennas)
+    datavec = convert(Vector{Float32}, s.data)
     datavecz = reinterpret(Complex{Float32}, datavec)
     data = reshape(datavecz, Int64(nant), Int64(npol), Int64(nchan), Int64(ntime))
 
     Stamp(
-        pyconvert(String,  s.seticoreVersion),
-        pyconvert(String,  s.sourceName),
-        pyconvert(Float64, s.ra),
-        pyconvert(Float64, s.dec),
-        pyconvert(Float64, s.fch1),
-        pyconvert(Float64, s.foff),
-        pyconvert(Float64, s.tstart),
-        pyconvert(Float64, s.tsamp),
-        pyconvert(Int32,   s.telescopeId),
-        pyconvert(Int32,   s.coarseChannel),
-        pyconvert(Int32,   s.fftSize),
-        pyconvert(Int32,   s.startChannel),
+        convert(String,  s.seticoreVersion),
+        convert(String,  s.sourceName),
+        convert(Float64, s.ra),
+        convert(Float64, s.dec),
+        convert(Float64, s.fch1),
+        convert(Float64, s.foff),
+        convert(Float64, s.tstart),
+        convert(Float64, s.tsamp),
+        convert(Int32,   s.telescopeId),
+        convert(Int32,   s.coarseChannel),
+        convert(Int32,   s.fftSize),
+        convert(Int32,   s.startChannel),
         Signal(s.signal),
-        pyconvert(Int32,   s.schan),
-        pyconvert(String,  s.obsid),
+        convert(Int32,   s.schan),
+        convert(String,  s.obsid),
         ntime,
         nchan,
         npol,

@@ -72,16 +72,16 @@ Construct a `Signal` from capnp object `s`.
 """
 function Signal(s)
     Signal(
-        pyconvert(Float64, s.frequency),
-        pyconvert(Int32,   s.index),
-        pyconvert(Int32,   s.driftSteps),
-        pyconvert(Float64, s.driftRate),
-        pyconvert(Float32, s.snr),
-        pyconvert(Int32,   s.coarseChannel),
-        pyconvert(Int32,   s.beam),
-        pyconvert(Int32,   s.numTimesteps),
-        pyconvert(Float32, s.power),
-        pyconvert(Float32, s.incoherentPower),
+        convert(Float64, s.frequency),
+        convert(Int32,   s.index),
+        convert(Int32,   s.driftSteps),
+        convert(Float64, s.driftRate),
+        convert(Float32, s.snr),
+        convert(Int32,   s.coarseChannel),
+        convert(Int32,   s.beam),
+        convert(Int32,   s.numTimesteps),
+        convert(Float32, s.power),
+        convert(Float32, s.incoherentPower),
     )
 end
 
@@ -122,26 +122,26 @@ end
 Construct a `Filterbank` from capnp object `f`.
 """
 function Filterbank(f)
-    ntime = pyconvert(Int32, f.numTimesteps)
-    nchan = pyconvert(Int32, f.numChannels)
-    datavec = pyconvert(Vector{Float32}, pylist(f.data))
+    ntime = convert(Int32, f.numTimesteps)
+    nchan = convert(Int32, f.numChannels)
+    datavec = convert(Vector{Float32}, f.data)
     data = reshape(datavec, Int64(nchan), Int64(ntime))
 
     Filterbank(
-        pyconvert(String,          f.sourceName),
-        pyconvert(Float64,         f.fch1),
-        pyconvert(Float64,         f.foff),
-        pyconvert(Float64,         f.tstart),
-        pyconvert(Float64,         f.tsamp),
-        pyconvert(Float64,         f.ra),
-        pyconvert(Float64,         f.dec),
-        pyconvert(Int32,           f.telescopeId),
+        convert(String,  f.sourceName),
+        convert(Float64, f.fch1),
+        convert(Float64, f.foff),
+        convert(Float64, f.tstart),
+        convert(Float64, f.tsamp),
+        convert(Float64, f.ra),
+        convert(Float64, f.dec),
+        convert(Int32,   f.telescopeId),
         ntime,
         nchan,
         data,
-        pyconvert(Int32,           f.coarseChannel),
-        pyconvert(Int32,           f.startChannel),
-        pyconvert(Int32,           f.beam)
+        convert(Int32,   f.coarseChannel),
+        convert(Int32,   f.startChannel),
+        convert(Int32,   f.beam)
     )
 end
 
