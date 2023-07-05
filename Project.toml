@@ -7,3 +7,8 @@ version = "0.2.1"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+
+[compat]
+Conda = "1.9.0"
+DataFrames = "1.5.0"
+PyCall = "1.96.1"
