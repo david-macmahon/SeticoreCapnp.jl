@@ -179,6 +179,8 @@ function load_hits(hits_filename; traversal_limit_in_words=2^30)
     hits = open(hits_filename) do io
         [Hit(h) for h in SeticoreCapnp.CapnpHit[].Hit.read_multiple(io; traversal_limit_in_words)]
     end
+    isempty(hits) && return (DataFrame(), Matrix{Float32}[])
+
     sdf = DataFrame(getproperty.(hits, :signal))
     fdf = DataFrame(getproperty.(hits, :filterbank))
     # Omit redundant numTimesteps field from Signal rather than Filterbank

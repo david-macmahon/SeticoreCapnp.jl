@@ -145,6 +145,8 @@ function load_stamps(stamps_filename; traversal_limit_in_words=2^30)
     df = open(stamps_filename) do io
         [Stamp(s) for s in SeticoreCapnp.CapnpStamp[].Stamp.read_multiple(io; traversal_limit_in_words)]
     end |> DataFrame
+    isempty(df) && return (df, Matrix{Complex{Float32}}[])
+
     # Store the Signal fields as additional columns, omitting redundant
     # `coarseChannel` and `numTimesteps` fields.
     data = df.data
