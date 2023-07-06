@@ -192,3 +192,21 @@ function load_hits(hits_filename; traversal_limit_in_words=2^30)
     select!(fdf, Not([:data, :coarseChannel, :beam]))
     hcat(sdf, fdf, makeunique=true), data
 end
+
+function save_hits(hits_filename, hits::DataFrame, data::Vector{Matrix{Float32}})
+    sdf = select(hits, fieldnames(SeticoreCapnp.Signal)...)
+    fdf = select(hits, filter(!=(:data), fieldnames(SeticoreCapnp.Filterbank))...)
+    capnp = SeticoreCapnp.CapnpHit[]
+    open(hits_filename, "w+") do io
+        for (srow, frow, drow) in zip(eachrow(sdf), eachrow(fdf), data)
+            s = capnp.Signal(; NamedTuple(srow)...)
+            f = capnp.Filterbank(; NamedTuple(frow)...)
+            dlist = f.init(:data, length(drow))
+            for i in eachindex(drow)
+                dlist[i] = drow[i]
+            end
+            h = capnp.Hit(; signal=s, filterbank=f)
+            h.write(io)
+        end
+    end
+end
