@@ -1,11 +1,15 @@
 module SeticoreCapnp
 
-export load_hits
+export load_hits, load_hit
 export save_hits
 export load_stamps
 
 using PyCall
 using DataFrames
+using OrderedCollections
+
+include("lseek.jl")
+using .Lseek: lseek
 
 const CapnpHit = Ref{PyObject}()
 const CapnpStamp = Ref{PyObject}()

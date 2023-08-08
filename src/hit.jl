@@ -86,6 +86,53 @@ function Signal(s)
 end
 
 """
+    Signal(d::AbstractDict)
+
+Construct a `Signal` from `AbstractDict` object `d`, whose key type must be
+`Symbol` or an `AbstractString`.
+"""
+function Signal(d::AbstractDict{T,Any}) where T<:Union{AbstractString,Symbol}
+    Signal(
+        # Maybe these converts are not needed?
+        convert(Float64, d[T(:frequency)]),
+        convert(Int32,   d[T(:index)]),
+        convert(Int32,   d[T(:driftSteps)]),
+        convert(Float64, d[T(:driftRate)]),
+        convert(Float32, d[T(:snr)]),
+        convert(Int32,   d[T(:coarseChannel)]),
+        convert(Int32,   d[T(:beam)]),
+        convert(Int32,   d[T(:numTimesteps)]),
+        convert(Float32, d[T(:power)]),
+        convert(Float32, d[T(:incoherentPower)]),
+    )
+end
+
+# Omit redundant numTimesteps field from Signal Dict rather than Filterbank Dict
+# because it was added to Signal after it was part of Filterbank so some hits
+# files will not have Signal.numTimesteps.
+const SignalDictFields = (
+    :frequency,
+    :index,
+    :driftSteps,
+    :driftRate,
+    :snr,
+    :coarseChannel,
+    :beam,
+    :power,
+    :incoherentPower
+)
+
+function OrderedCollections.OrderedDict{Symbol,Any}(s::Signal)
+    OrderedDict{Symbol,Any}(
+        SignalDictFields .=> getfield.(Ref(s), SignalDictFields)
+    )
+end
+
+function OrderedCollections.OrderedDict(s::Signal)
+    OrderedCollections.OrderedDict{Symbol,Any}(s)
+end
+
+"""
 The `Filterbank` struct contains a smaller slice of the larger filterbank that
 we originally found this hit in.
 """
@@ -146,6 +193,65 @@ function Filterbank(f)
 end
 
 """
+    Filterbank(d::AbstractDict, data::Array)
+
+Construct a `Filterbank` from `AbstractDict` object `d`, whose key type must be
+`Symbol` or an `AbstractString`, and `data`.
+"""
+function Filterbank(d::AbstractDict{T,Any}, data::Array{Float32}) where T<:Union{AbstractString,Symbol}
+    Filterbank(
+        # Maybe these converts are not needed?
+        convert(String,  d[T(:sourceName)]),
+        convert(Float64, d[T(:fch1)]),
+        convert(Float64, d[T(:foff)]),
+        convert(Float64, d[T(:tstart)]),
+        convert(Float64, d[T(:tsamp)]),
+        convert(Float64, d[T(:ra)]),
+        convert(Float64, d[T(:dec)]),
+        convert(Int32,   d[T(:telescopeId)]),
+        convert(Int32,   d[T(:numTimesteps)]),
+        convert(Int32,   d[T(:numChannels)]),
+        data,
+        convert(Int32,   d[T(:coarseChannel)]),
+        convert(Int32,   d[T(:startChannel)]),
+        convert(Int32,   d[T(:beam)])
+    )
+end
+
+function getdata(f::Filterbank)
+    f.data
+end
+
+function getdata(::Nothing)
+    Float32[;;]
+end
+
+# Omit data and redundant coarseChannel and beam fields from Filterbank Dict
+const FilterbankDictFields = (
+    :sourceName,
+    :fch1,
+    :foff,
+    :tstart,
+    :tsamp,
+    :ra,
+    :dec,
+    :telescopeId,
+    :numTimesteps,
+    :numChannels,
+    :startChannel,
+)
+
+function OrderedCollections.OrderedDict{Symbol,Any}(f::Filterbank)
+    OrderedDict{Symbol,Any}(
+        FilterbankDictFields .=> getfield.(Ref(f), FilterbankDictFields)
+    )
+end
+
+function OrderedCollections.OrderedDict(f::Filterbank)
+    OrderedCollections.OrderedDict{Symbol,Any}(f)
+end
+
+"""
 A hit without a signal indicates that we looked for a hit here and didn't find one.
 A hit without a filterbank indicates that to save space we didn't store any filterbank
 data in this file; it should be available elsewhere.
@@ -166,47 +272,96 @@ function Hit(h)
     )
 end
 
-"""
-    load_hits(filename; kwargs...) -> meta::DataFrame, data::Vector{Array}
-
-Load the `Hit`s from the given `filename` and return the metadata fields as a
-`DataFrame` and the "Filterbank" waterfall data as a `Vector{Array}` whose
-elements correspond one-to-one with the rows of the metadata DataFrame.  The
-only supported `kwargs` is `traversal_limit_in_words` which sets the maximmum
-size of a hit.  It default it 2^30 words.
-"""
-function load_hits(hits_filename; traversal_limit_in_words=2^30)
-    hits = open(hits_filename) do io
-        [Hit(h) for h in SeticoreCapnp.CapnpHit[].Hit.read_multiple(io; traversal_limit_in_words)]
-    end
-    isempty(hits) && return (DataFrame(), Matrix{Float32}[])
-
-    sdf = DataFrame(getproperty.(hits, :signal))
-    fdf = DataFrame(getproperty.(hits, :filterbank))
-    # Omit redundant numTimesteps field from Signal rather than Filterbank
-    # because it was added to Signal after it was part of Filterbank so some
-    # hits files will not have Signal.numTimesteps.
-    # Omit redundant coarseChannel and beam fields from Filterbank
-    data = fdf.data
-    select!(sdf, Not(:numTimesteps))
-    select!(fdf, Not([:data, :coarseChannel, :beam]))
-    hcat(sdf, fdf, makeunique=true), data
+function getdata(h::Hit)
+    getdata(h.filterbank)
 end
 
-function save_hits(hits_filename, hits::DataFrame, data::Vector{Matrix{Float32}})
-    sdf = select(hits, fieldnames(SeticoreCapnp.Signal)...)
-    fdf = select(hits, filter(!=(:data), fieldnames(SeticoreCapnp.Filterbank))...)
+function OrderedCollections.OrderedDict{Symbol,Any}(h::Hit)
+    if h.signal === nothing && h.filterbank === nothing
+        OrderedDict{Symbol,Any}()
+    elseif h.signal === nothing
+        OrderedDict(h.filterbank)
+    elseif h.filterbank === nothing
+        OrderedDict(h.signal)
+    else
+        merge(OrderedDict(h.signal), OrderedDict(h.filterbank))
+    end
+end
+
+function OrderedCollections.OrderedDict(h::Hit)
+    OrderedCollections.OrderedDict{Symbol,Any}(h)
+end
+
+"""
+    load_hits(filename; kwargs...) -> meta::Vector{OrderedDict}, data::Vector{Array}
+
+Load the `Hit`s from the given `filename` and return the metadata fields as an
+`OrderedDict{Symbol,Any}` and the "Filterbank" waterfall data as a
+`Vector{Array}` whose elements correspond one-to-one with the entries of the
+metadata `OrderedDict`.  The metadat includes a `:fileoffset` entry whose value
+is the offset of the Hit within the input file. This offset can be used with
+`load_hit`.
+
+The only supported `kwargs` is `traversal_limit_in_words` which sets the
+maximmum size of a hit.  It default it 2^30 words.
+"""
+function load_hits(hits_filename; traversal_limit_in_words=2^30)
+    hits = Hit[]
+    offsets = Int64[]
+    n = filesize(hits_filename)
+    open(hits_filename) do io
+        while lseek(io) < n
+            push!(offsets, lseek(io))
+            h = SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words)
+            push!(hits, Hit(h))
+            # Break if io's fd did not advance
+            # (avoids pathological infinite loop)
+            lseek(io) == offsets[end] && break
+        end
+    end
+    isempty(hits) && return (OrderedDict{Symbol,Any}(), Matrix{Float32}[])
+
+    data = map(getdata, hits)
+    meta = OrderedDict.(hits)
+    setindex!.(meta, offsets, :fileoffset)
+    meta, data
+end
+
+"""
+    load_hit(filename, offset; kwargs...) -> meta::OrderedDict, data::Array
+
+Load a single `Hit` from the given `offset` within `filename` and return the
+metadata fields as an `OrderedDict{Symbol,Any}` and the "Filterbank" waterfall
+data as an `Array`.  For consistency with `load_hits`, the metadat includes a
+`:fileoffset` entry whose value is `offset`.
+
+The only supported `kwargs` is `traversal_limit_in_words` which sets the
+maximmum size of a hit.  It default it 2^30 words.
+"""
+function load_hit(hits_filename, offset; traversal_limit_in_words=2^30)
+    hit = open(hits_filename) do io
+        seek(io, offset)
+        Hit(SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words))
+    end
+
+    data = getdata(hit)
+    meta = OrderedDict(hit)
+    setindex!(meta, offset, :fileoffset)
+    meta, data
+end
+
+function save_hits(hits_filename, hits::Vector{<:AbstractDict}, data::Vector{Matrix{Float32}})
     capnp = SeticoreCapnp.CapnpHit[]
     open(hits_filename, "w+") do io
-        for (srow, frow, drow) in zip(eachrow(sdf), eachrow(fdf), data)
-            s = capnp.Signal(; NamedTuple(srow)...)
-            f = capnp.Filterbank(; NamedTuple(frow)...)
-            dlist = f.init(:data, length(drow))
-            for i in eachindex(drow)
-                dlist[i] = drow[i]
+        for (h, d) in zip(hits, data)
+            s = capnp.Signal(; filter(kv->first(kv) in fieldnames(Signal), h)...)
+            f = capnp.Filterbank(; filter(kv->first(kv) in fieldnames(Filterbank), h)...)
+            dlist = f.init(:data, length(d))
+            for i in eachindex(d)
+                dlist[i] = d[i]
             end
-            h = capnp.Hit(; signal=s, filterbank=f)
-            h.write(io)
+            capnphit = capnp.Hit(; signal=s, filterbank=f)
+            capnphit.write(io)
         end
     end
 end
