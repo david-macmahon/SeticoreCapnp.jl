@@ -85,7 +85,7 @@ struct Stamp
   # Dimensions of the data
   numTimesteps::Int32
   numChannels::Int32
-  numPolarities::Int32
+  numPolarizations::Int32
   numAntennas::Int32
  
   """
@@ -133,25 +133,130 @@ function Stamp(s)
 end
 
 """
-    load_stamps(filename) -> DataFrame
+    Stamp(d::AbstractDict, data::Array)
 
-Load the `Stamp`s from the given `filename` and return the metadata fields as a
-`DataFrame` and the Stamp `data` fields as a `Vector{Array}` whose elements
-correspond one-to-one with the rows of the metadata DataFrame.  The only
-supported `kwargs` is `traversal_limit_in_words` which sets the maximmum size of
-a stamp.  It default it 2^30 words.
+Construct a `Stamp` from `AbstractDict` object `d`, whose key type must be
+`Symbol` or an `AbstractString`, and `data`.
+"""
+function Stamp(d::AbstractDict{T,Any}, data::Array{Float32}) where T<:Union{AbstractString,Symbol}
+    Stamp(
+        # Maybe these converts are not needed?
+        convert(String,  d[T(:seticoreVersion)]),
+        convert(String,  d[T(:sourceName)]),
+        convert(Float64, d[T(:ra)]),
+        convert(Float64, d[T(:dec)]),
+        convert(Float64, d[T(:fch1)]),
+        convert(Float64, d[T(:foff)]),
+        convert(Float64, d[T(:tstart)]),
+        convert(Float64, d[T(:tsamp)]),
+        convert(Int32,   d[T(:telescopeId)]),
+        convert(Int32,   d[T(:coarseChannel)]),
+        convert(Int32,   d[T(:fftSize)]),
+        convert(Int32,   d[T(:startChannel)]),
+        Signal(d),
+        convert(Int32,   d[T(:schan)]),
+        convert(String,  d[T(:obsid)]),
+        convert(Int32,   d[T(:numTimesteps)]),
+        convert(Int32,   d[T(:numChannels)]),
+        convert(Int32,   d[T(:numPolarizations)]),
+        convert(Int32,   d[T(:numAntennas)]),
+        data
+    )
+end
+
+function getdata(s::Stamp)
+    s.data
+end
+
+const StampDictFields = (
+    :seticoreVersion,
+    :sourceName,
+    :ra,
+    :dec,
+    :fch1,
+    :foff,
+    :tstart,
+    :tsamp,
+    :telescopeId,
+    :coarseChannel,
+    :fftSize,
+    :startChannel,
+    :schan,
+    :obsid,
+    :numTimesteps,
+    :numChannels,
+    :numPolarizations,
+    :numAntennas
+)
+
+function OrderedCollections.OrderedDict{Symbol,Any}(s::Stamp)
+    d = OrderedDict{Symbol,Any}(
+        StampDictFields .=> getfield.(Ref(s), StampDictFields)
+    )
+    merge!(d, OrderedDict(s.signal))
+end
+
+function OrderedCollections.OrderedDict(s::Stamp)
+    OrderedCollections.OrderedDict{Symbol,Any}(s)
+end
+
+"""
+    load_stamps(filename; kwargs...) -> Vector{OrderedDict}, Vector{Array{Float32,4}}
+
+Load the `Stamp`s from the given `filename` and return the metadata of the
+`Stamp`s as a `Vector{OrderedDict{Symbol,Any}}` and the data of the stamps as a
+`Vector{Array{Float32,4}}`.
+
+The only supported `kwargs` is `traversal_limit_in_words` which sets the
+maximmum size of a stamp.  It default it 2^30 words.
 """
 function load_stamps(stamps_filename; traversal_limit_in_words=2^30)
-    df = open(stamps_filename) do io
-        [Stamp(s) for s in SeticoreCapnp.CapnpStamp[].Stamp.read_multiple(io; traversal_limit_in_words)]
-    end |> DataFrame
-    isempty(df) && return (df, Matrix{Complex{Float32}}[])
+    stamps = Stamp[]
+    offsets = Int64[]
+    n = filesize(stamps_filename)
+    open(stamps_filename) do io
+        while lseek(io) < n
+            push!(offsets, lseek(io))
+            s = SeticoreCapnp.CapnpStamp[].Stamp.read(io; traversal_limit_in_words)
+            push!(stamps, Stamp(s))
+            # Break if io's fd did not advance
+            # (avoids pathological infinite loop)
+            lseek(io) == offsets[end] && break
+        end
+    end
+    isempty(stamps) && return (OrderedDict{Symbol,Any}(), Array{Complex{Float32},4}[])
 
-    # Store the Signal fields as additional columns, omitting redundant
-    # `coarseChannel` and `numTimesteps` fields.
-    data = df.data
-    sigdf = DataFrame(df.signal)
-    select!(df, Not([:data, :signal]))
-    select!(sigdf, Not([:coarseChannel, :numTimesteps]))
-    hcat(df, sigdf, makeunique=true), data
+    meta = OrderedDict.(stamps)
+    # Merge the Signal fields as additional columns, omitting redundant
+    # `coarseChannel` field (and already omitted `numTimesteps` field).
+    sigs = OrderedDict.(getfield.(stamps, :signal))
+    delete!.(sigs, :coarseChannel)
+    merge!.(meta, sigs)
+    # Add file offsets
+    setindex!.(meta, offsets, :fileoffset)
+    # Get data
+    data = map(getdata, stamps)
+    meta, data
+end
+
+"""
+    load_stamp(filename, offset; kwargs...) -> OrderedDict, Array{Float32,4}
+
+Load a single `Stamp`s from the given `offset` within `filename` and return the
+metadata of the stamp as an `OrderedDict{Symbol,Any}` and the data of the
+stamp as an `Array{Float32,4}}`.
+
+The only supported `kwargs` is `traversal_limit_in_words` which sets the
+maximmum size of a stamp.  It default it 2^30 words.
+"""
+function load_stamp(stamps_filename, offset; traversal_limit_in_words=2^30)
+    stamp = open(stamps_filename) do io
+        seek(io, offset)
+        Stamp(SeticoreCapnp.CapnpStamp[].Stamp.read(io; traversal_limit_in_words))
+    end
+
+    data = getdata(stamp)
+    meta = OrderedDict(stamp)
+    setindex!(meta, offset, :fileoffset)
+    meta, data
 end

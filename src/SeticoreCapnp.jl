@@ -2,7 +2,7 @@ module SeticoreCapnp
 
 export load_hits, load_hit
 export save_hits
-export load_stamps
+export load_stamps, load_stamp
 
 using PyCall
 using DataFrames
