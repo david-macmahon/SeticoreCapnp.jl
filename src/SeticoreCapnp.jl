@@ -5,7 +5,6 @@ export save_hits
 export load_stamps, load_stamp
 
 using PyCall
-using DataFrames
 using OrderedCollections
 
 include("lseek.jl")
