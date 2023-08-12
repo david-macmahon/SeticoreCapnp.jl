@@ -293,60 +293,87 @@ function OrderedCollections.OrderedDict(h::Hit)
 end
 
 """
-    load_hits(filename; kwargs...) -> meta::Vector{OrderedDict}, data::Vector{Array}
+    load_hit(filename, offset; kwargs...) -> OrderedDict, Matrix{Float32}
+    load_hit(io::IO[, offset]; kwargs...) -> OrderedDict, Matrix{Float32}
 
-Load the `Hit`s from the given `filename` and return the metadata fields as an
+Load a single `Hit` from the given `offset` (or current position) within
+`filename` or `io` and return the metadata fields as an
 `OrderedDict{Symbol,Any}` and the "Filterbank" waterfall data as a
-`Vector{Array}` whose elements correspond one-to-one with the entries of the
-metadata `OrderedDict`.  The metadat includes a `:fileoffset` entry whose value
-is the offset of the Hit within the input file. This offset can be used with
-`load_hit`.
+`Matrix{Float32}`.  The metadat includes a `:fileoffset` entry whose value is
+`offset`.
+
+The only supported `kwargs` is `traversal_limit_in_words` which sets the
+maximmum size of a hit.  It default it 2^30 words.
+"""
+function load_hit(io::IO; traversal_limit_in_words=2^30)
+    offset = lseek(io)
+    hit = Hit(SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words))
+    data = getdata(hit)
+
+    meta = OrderedDict(hit)
+    meta[:fileoffset] = offset
+
+    meta, data
+end
+
+function load_hit(io::IO, offset; traversal_limit_in_words=2^30)
+    seek(io, offset)
+    load_hit(io; traversal_limit_in_words)
+end
+
+function load_hit(hits_filename, offset; traversal_limit_in_words=2^30)
+    open(hits_filename) do io
+        load_hit(io, offset; traversal_limit_in_words)
+    end
+end
+
+"""
+    foreach_hit(f, filename; kwargs...)
+
+For each `Hit` in the given `filename`, call `f` passing 
+`OrderedDict{Symbol,Any}` metadata the "Filterbank" waterfall `Matrix` data.
+The metadat includes a `:fileoffset` entry whose value is the offset of the
+`Hit` within the input file. This offset can be used with `load_hit` if desired.
+
+The only supported `kwargs` is `traversal_limit_in_words` which sets the
+maximmum size of a hit.  It default it 2^30 words.
+"""
+function foreach_hit(f, hits_filename; traversal_limit_in_words=2^30)
+    # TODO Make this into a proper Julia iterator
+    n = filesize(hits_filename)
+    open(hits_filename) do io
+        while lseek(io) < n
+            m, d = load_hit(io; traversal_limit_in_words)
+            f(m, d)
+            # Break if io's fd did not advance (should "never" happen)
+            # (avoids pathological infinite loop)
+            lseek(io) == m[:fileoffset] && break
+        end
+    end
+    nothing
+end
+
+"""
+    load_hits(filename; kwargs...) -> Vector{OrderedDict}, Vector{Matrix}
+
+Load the `Hit`s from the given `filename` and return the metadata fields as a
+`Vector{OrderedDict{Symbol,Any}}` and the "Filterbank" waterfall data as a
+`Vector{Matrix}` whose elements correspond one-to-one with the entries of the
+metadata `Vector`.  The metadata entries include a `:fileoffset` entry whose
+value is the offset of the `Hit` within the input file. This offset can be used
+with `load_hit` if desired.
 
 The only supported `kwargs` is `traversal_limit_in_words` which sets the
 maximmum size of a hit.  It default it 2^30 words.
 """
 function load_hits(hits_filename; traversal_limit_in_words=2^30)
-    hits = Hit[]
-    offsets = Int64[]
-    n = filesize(hits_filename)
-    open(hits_filename) do io
-        while lseek(io) < n
-            push!(offsets, lseek(io))
-            h = SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words)
-            push!(hits, Hit(h))
-            # Break if io's fd did not advance
-            # (avoids pathological infinite loop)
-            lseek(io) == offsets[end] && break
-        end
-    end
-    isempty(hits) && return (OrderedDict{Symbol,Any}(), Matrix{Float32}[])
-
-    data = map(getdata, hits)
-    meta = OrderedDict.(hits)
-    setindex!.(meta, offsets, :fileoffset)
-    meta, data
-end
-
-"""
-    load_hit(filename, offset; kwargs...) -> meta::OrderedDict, data::Array
-
-Load a single `Hit` from the given `offset` within `filename` and return the
-metadata fields as an `OrderedDict{Symbol,Any}` and the "Filterbank" waterfall
-data as an `Array`.  For consistency with `load_hits`, the metadat includes a
-`:fileoffset` entry whose value is `offset`.
-
-The only supported `kwargs` is `traversal_limit_in_words` which sets the
-maximmum size of a hit.  It default it 2^30 words.
-"""
-function load_hit(hits_filename, offset; traversal_limit_in_words=2^30)
-    hit = open(hits_filename) do io
-        seek(io, offset)
-        Hit(SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words))
+    meta = OrderedDict{Symbol,Any}[]
+    data = Matrix{Float32}[]
+    foreach_hit(hits_filename; traversal_limit_in_words) do m,d
+        push!(meta, m)
+        push!(data, d)
     end
 
-    data = getdata(hit)
-    meta = OrderedDict(hit)
-    setindex!(meta, offset, :fileoffset)
     meta, data
 end
 

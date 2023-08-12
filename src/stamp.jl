@@ -201,62 +201,92 @@ function OrderedCollections.OrderedDict(s::Stamp)
 end
 
 """
+    load_stamp(filename, offset; kwargs...) -> OrderedDict, Array{ComplexF32,4}
+    load_stamp(io::IO[, offset]; kwargs...) -> OrderedDict, Array{ComplexF32,4}
+
+Load a single `Stamp` from the given `offset` (or current position) within
+`filename` or `io` and return the metadata fields as an
+`OrderedDict{Symbol,Any}` and the complex voltage data of the stamp as an
+`Array{ComplexF32,4}`.  For consistency with `load_hits`, the metadat includes a
+`:fileoffset` entry whose value is `offset`.
+
+The only supported `kwargs` is `traversal_limit_in_words` which sets the
+maximmum size of a stamp.  It default it 2^30 words.
+"""
+function load_stamp(io::IO; traversal_limit_in_words=2^30)
+    offset = lseek(io)
+    stamp = Stamp(SeticoreCapnp.CapnpStamp[].Stamp.read(io; traversal_limit_in_words))
+    data = getdata(stamp)
+
+    meta = OrderedDict(stamp)
+    # Merge the Signal fields as additional columns, omitting redundant
+    # `coarseChannel` field (and already omitted `numTimesteps` field).
+    sig = OrderedDict(stamp.signal)
+    delete!(sig, :coarseChannel)
+    merge!(meta, sig)
+    # Add file offsets
+    meta[:fileoffset] = offset
+
+    meta, data
+end
+
+function load_stamp(io::IO, offset; traversal_limit_in_words=2^30)
+    seek(io, offset)
+    load_stamp(io; traversal_limit_in_words)
+end
+
+function load_stamp(stamps_filename, offset; traversal_limit_in_words=2^30)
+    open(stamps_filename) do io
+        load_stamp(io, offset; traversal_limit_in_words)
+    end
+end
+
+"""
+    foreach_stamp(f, filename; kwargs...)
+
+For each `Stamp` in the given `filename`, call `f` passing 
+`OrderedDict{Symbol,Any}` metadata the `Array{ComplexF32,4}` voltage data.  The
+metadat includes a `:fileoffset` entry whose value is the offset of the `Stamp`
+within the input file. This offset can be used with `load_stamp` if desired.
+
+The only supported `kwargs` is `traversal_limit_in_words` which sets the
+maximmum size of a hit.  It default it 2^30 words.
+"""
+function foreach_stamp(f, stamps_filename; traversal_limit_in_words=2^30)
+    # TODO Make this into a proper Julia iterator
+    n = filesize(stamps_filename)
+    open(stamps_filename) do io
+        while lseek(io) < n
+            m, d = load_stamp(io; traversal_limit_in_words)
+            f(m, d)
+            # Break if io's fd did not advance (should "never" happen)
+            # (avoids pathological infinite loop)
+            lseek(io) == m[:fileoffset] && break
+        end
+    end
+    nothing
+end
+
+"""
     load_stamps(filename; kwargs...) -> Vector{OrderedDict}, Vector{Array{Float32,4}}
 
-Load the `Stamp`s from the given `filename` and return the metadata of the
-`Stamp`s as a `Vector{OrderedDict{Symbol,Any}}` and the data of the stamps as a
-`Vector{Array{Float32,4}}`.
+Load the `Stamp`s from the given `filename` and return the metadata fields as a
+`Vector{OrderedDict{Symbol,Any}}` and the voltage data as a
+`Vector{Array{ComplexF32,4}}` whose elements correspond one-to-one with the
+entries of the metadata `Vector`.  The metadata entries includes a `:fileoffset`
+entry whose value is the offset of the `Stamp` within the input file. This
+offset can be used with `load_stamp` if desired.
 
 The only supported `kwargs` is `traversal_limit_in_words` which sets the
 maximmum size of a stamp.  It default it 2^30 words.
 """
 function load_stamps(stamps_filename; traversal_limit_in_words=2^30)
-    stamps = Stamp[]
-    offsets = Int64[]
-    n = filesize(stamps_filename)
-    open(stamps_filename) do io
-        while lseek(io) < n
-            push!(offsets, lseek(io))
-            s = SeticoreCapnp.CapnpStamp[].Stamp.read(io; traversal_limit_in_words)
-            push!(stamps, Stamp(s))
-            # Break if io's fd did not advance
-            # (avoids pathological infinite loop)
-            lseek(io) == offsets[end] && break
-        end
-    end
-    isempty(stamps) && return (OrderedDict{Symbol,Any}(), Array{Complex{Float32},4}[])
-
-    meta = OrderedDict.(stamps)
-    # Merge the Signal fields as additional columns, omitting redundant
-    # `coarseChannel` field (and already omitted `numTimesteps` field).
-    sigs = OrderedDict.(getfield.(stamps, :signal))
-    delete!.(sigs, :coarseChannel)
-    merge!.(meta, sigs)
-    # Add file offsets
-    setindex!.(meta, offsets, :fileoffset)
-    # Get data
-    data = map(getdata, stamps)
-    meta, data
-end
-
-"""
-    load_stamp(filename, offset; kwargs...) -> OrderedDict, Array{Float32,4}
-
-Load a single `Stamp`s from the given `offset` within `filename` and return the
-metadata of the stamp as an `OrderedDict{Symbol,Any}` and the data of the
-stamp as an `Array{Float32,4}}`.
-
-The only supported `kwargs` is `traversal_limit_in_words` which sets the
-maximmum size of a stamp.  It default it 2^30 words.
-"""
-function load_stamp(stamps_filename, offset; traversal_limit_in_words=2^30)
-    stamp = open(stamps_filename) do io
-        seek(io, offset)
-        Stamp(SeticoreCapnp.CapnpStamp[].Stamp.read(io; traversal_limit_in_words))
+    meta = OrderedDict{Symbol,Any}[]
+    data = Array{ComplexF32}[]
+    foreach_stamp(stamps_filename; traversal_limit_in_words) do m,d
+        push!(meta, m)
+        push!(data, d)
     end
 
-    data = getdata(stamp)
-    meta = OrderedDict(stamp)
-    setindex!(meta, offset, :fileoffset)
     meta, data
 end
