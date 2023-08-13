@@ -31,8 +31,18 @@ stamps = SeticoreCapnp.load_stamps("mydatafile.hits")
 
 The `load_hits` and `load_stamps` functions both return a Vector of
 `OrderedDict{Symbol,Any}` objects containing hit or stamp metadata from the
-specified file as well as a Vector of Arrays containing the data *Filterbank* or
+specified file as well as a Vector of Arrays containing the *Filterbank* data or
 *RAW voltage* data associated with each hit or stamp.
+
+By default, the `find_hits` function will only return unique hits, even if the
+file contain duplicate hits.  This is to work around a bug in some versions of
+`seticore` that output duplicate hits.  If the file is known to be
+duplicate-free or if you want the duplicates, pass `unique=false` to
+`find_hits`.
+
+The metadata will also contain a `:fileoffset` key that can be used with the
+singular name functions `load_hit` or `load_stamp` to (re-)load just that
+individual hit or stamp from the input file.
 
 ## Hits
 
@@ -58,8 +68,9 @@ The `OrderedDict` for a hit contains these keys:
 | :numTimesteps  | Int32           | Number of time samples in `data`                                             |
 | :numChannels   | Int32           | Number of frequency channels in `data`                                       |
 | :startChannel  | Int32           | First channel of data corresponds to this fine channel within coarse channel |
+| :fileoffset    | Int64           | Offset from which this hit can be loaded                                     |
 
-The data for a hit is a `Matrix{Float32}` sized as `(numChannels,
+The data for each hit is a `Matrix{Float32}` sized as `(numChannels,
 numTimesteps)`.
 
 ## Stamps
@@ -84,6 +95,7 @@ The `OrderedDict` for stamps contains these keys:
 | :numChannels      | Int32                | Number of frequency channels in `data`         |
 | :numPolarizations | Int32                | Number of polarizations in `data`              |
 | :numAntennas      | Int32                | Number of antennas in `data`                   |
+| :fileoffset       | Int64                | Offset from which this stamp can be loaded     |
 
-The data for stamp is an `:Array{ComplexF32, 4}` sized as `(numAntennas,
+The data for each stamp is an `Array{ComplexF32, 4}` sized as `(numAntennas,
 numPolarizations, numChannels, numTimesteps)`.
