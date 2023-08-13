@@ -342,14 +342,22 @@ metadata `Vector`.  The metadata entries include a `:fileoffset` entry whose
 value is the offset of the `Hit` within the input file. This offset can be used
 with `load_hit` if desired.
 
-The only supported `kwargs` is `traversal_limit_in_words` which sets the
-maximmum size of a hit.  It default it 2^30 words.
+The only supported `kwargs` are `traversal_limit_in_words` which sets the
+maximmum size of a hit (defaults to 2^30 words) and `unique` which makes the
+function return only unique hits when `true` (the default).
 """
-function load_hits(hits_filename; traversal_limit_in_words=2^30)
+function load_hits(hits_filename; traversal_limit_in_words=2^30, unique=true)
     meta = OrderedDict{Symbol,Any}[]
     data = Matrix{Float32}[]
+    seen = Set{OrderedDict{Symbol,Any}}()
     open(hits_filename) do io
         for (m,d) in HitsFile(io, traversal_limit_in_words)
+            if unique
+                offset = pop!(m, :fileoffset)
+                m in seen && continue
+                push!(seen, m)
+                m[:fileoffset] = offset
+            end
             push!(meta, m)
             push!(data, d)
         end
