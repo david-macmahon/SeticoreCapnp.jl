@@ -106,7 +106,9 @@ function Stamp(s)
     nant  = convert(Int32, s.numAntennas)
     datavec = convert(Vector{Float32}, s.data)
     datavecz = reinterpret(Complex{Float32}, datavec)
-    data = reshape(datavecz, Int64(nant), Int64(npol), Int64(nchan), Int64(ntime))
+    # Added type assertions to make JET happy
+    data = reshape(datavecz, Int64(nant)::Int64, Int64(npol)::Int64,
+                             Int64(nchan)::Int64, Int64(ntime)::Int64)
 
     Stamp(
         convert(String,  s.seticoreVersion),
@@ -241,31 +243,7 @@ function load_stamp(stamps_filename, offset; traversal_limit_in_words=2^30)
     end
 end
 
-"""
-    foreach_stamp(f, filename; kwargs...)
-
-For each `Stamp` in the given `filename`, call `f` passing 
-`OrderedDict{Symbol,Any}` metadata the `Array{ComplexF32,4}` voltage data.  The
-metadat includes a `:fileoffset` entry whose value is the offset of the `Stamp`
-within the input file. This offset can be used with `load_stamp` if desired.
-
-The only supported `kwargs` is `traversal_limit_in_words` which sets the
-maximmum size of a hit.  It default it 2^30 words.
-"""
-function foreach_stamp(f, stamps_filename; traversal_limit_in_words=2^30)
-    # TODO Make this into a proper Julia iterator
-    n = filesize(stamps_filename)
-    open(stamps_filename) do io
-        while lseek(io) < n
-            m, d = load_stamp(io; traversal_limit_in_words)
-            f(m, d)
-            # Break if io's fd did not advance (should "never" happen)
-            # (avoids pathological infinite loop)
-            lseek(io) == m[:fileoffset] && break
-        end
-    end
-    nothing
-end
+include("stampsfile.jl")
 
 """
     load_stamps(filename; kwargs...) -> Vector{OrderedDict}, Vector{Array{Float32,4}}
@@ -282,10 +260,12 @@ maximmum size of a stamp.  It default it 2^30 words.
 """
 function load_stamps(stamps_filename; traversal_limit_in_words=2^30)
     meta = OrderedDict{Symbol,Any}[]
-    data = Array{ComplexF32}[]
-    foreach_stamp(stamps_filename; traversal_limit_in_words) do m,d
-        push!(meta, m)
-        push!(data, d)
+    data = Array{ComplexF32,4}[]
+    open(stamps_filename) do io
+        for (m,d) in StampsFile(io, traversal_limit_in_words)
+            push!(meta, m)
+            push!(data, d)
+        end
     end
 
     meta, data

@@ -172,7 +172,8 @@ function Filterbank(f)
     ntime = convert(Int32, f.numTimesteps)
     nchan = convert(Int32, f.numChannels)
     datavec = convert(Vector{Float32}, f.data)
-    data = reshape(datavec, Int64(nchan), Int64(ntime))
+    # Added type assertions to make JET happy
+    data = reshape(datavec, Int64(nchan)::Int64, Int64(ntime)::Int64)
 
     Filterbank(
         convert(String,  f.sourceName),
@@ -280,11 +281,11 @@ function OrderedCollections.OrderedDict{Symbol,Any}(h::Hit)
     if h.signal === nothing && h.filterbank === nothing
         OrderedDict{Symbol,Any}()
     elseif h.signal === nothing
-        OrderedDict(h.filterbank)
+        OrderedDict(h.filterbank::Filterbank)
     elseif h.filterbank === nothing
-        OrderedDict(h.signal)
+        OrderedDict(h.signal::Signal)
     else
-        merge(OrderedDict(h.signal), OrderedDict(h.filterbank))
+        merge(OrderedDict(h.signal::Signal), OrderedDict(h.filterbank::Filterbank))
     end
 end
 
@@ -305,8 +306,10 @@ Load a single `Hit` from the given `offset` (or current position) within
 The only supported `kwargs` is `traversal_limit_in_words` which sets the
 maximmum size of a hit.  It default it 2^30 words.
 """
-function load_hit(io::IO; traversal_limit_in_words=2^30)
+function load_hit(io::IO; traversal_limit_in_words=2^30)::Tuple{OrderedDict{Symbol,Any},Matrix{Float32}}
     offset = lseek(io)
+    # At EOF, return empty meta and empty data
+    offset == filesize(io) && return OrderedDict{Symbol,Any}(), Float32[;;]
     hit = Hit(SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words))
     data = getdata(hit)
 
@@ -327,31 +330,7 @@ function load_hit(hits_filename, offset; traversal_limit_in_words=2^30)
     end
 end
 
-"""
-    foreach_hit(f, filename; kwargs...)
-
-For each `Hit` in the given `filename`, call `f` passing 
-`OrderedDict{Symbol,Any}` metadata the "Filterbank" waterfall `Matrix` data.
-The metadat includes a `:fileoffset` entry whose value is the offset of the
-`Hit` within the input file. This offset can be used with `load_hit` if desired.
-
-The only supported `kwargs` is `traversal_limit_in_words` which sets the
-maximmum size of a hit.  It default it 2^30 words.
-"""
-function foreach_hit(f, hits_filename; traversal_limit_in_words=2^30)
-    # TODO Make this into a proper Julia iterator
-    n = filesize(hits_filename)
-    open(hits_filename) do io
-        while lseek(io) < n
-            m, d = load_hit(io; traversal_limit_in_words)
-            f(m, d)
-            # Break if io's fd did not advance (should "never" happen)
-            # (avoids pathological infinite loop)
-            lseek(io) == m[:fileoffset] && break
-        end
-    end
-    nothing
-end
+include("hitsfile.jl")
 
 """
     load_hits(filename; kwargs...) -> Vector{OrderedDict}, Vector{Matrix}
@@ -369,26 +348,32 @@ maximmum size of a hit.  It default it 2^30 words.
 function load_hits(hits_filename; traversal_limit_in_words=2^30)
     meta = OrderedDict{Symbol,Any}[]
     data = Matrix{Float32}[]
-    foreach_hit(hits_filename; traversal_limit_in_words) do m,d
-        push!(meta, m)
-        push!(data, d)
+    open(hits_filename) do io
+        for (m,d) in HitsFile(io, traversal_limit_in_words)
+            push!(meta, m)
+            push!(data, d)
+        end
     end
 
     meta, data
 end
 
-function save_hits(hits_filename, hits::Vector{<:AbstractDict}, data::Vector{Matrix{Float32}})
+function save_hit(io, hit::AbstractDict, data::Matrix{Float32})
     capnp = SeticoreCapnp.CapnpHit[]
+    s = capnp.Signal(; filter(kv->first(kv) in fieldnames(Signal), hit)...)
+    f = capnp.Filterbank(; filter(kv->first(kv) in fieldnames(Filterbank), hit)...)
+    dlist = f.init(:data, length(data))
+    for i in eachindex(data)
+        dlist[i] = data[i]
+    end
+    capnphit = capnp.Hit(; signal=s, filterbank=f)
+    capnphit.write(io)
+end
+
+function save_hits(hits_filename, hits::Vector{<:AbstractDict}, data::Vector{Matrix{Float32}})
     open(hits_filename, "w+") do io
         for (h, d) in zip(hits, data)
-            s = capnp.Signal(; filter(kv->first(kv) in fieldnames(Signal), h)...)
-            f = capnp.Filterbank(; filter(kv->first(kv) in fieldnames(Filterbank), h)...)
-            dlist = f.init(:data, length(d))
-            for i in eachindex(d)
-                dlist[i] = d[i]
-            end
-            capnphit = capnp.Hit(; signal=s, filterbank=f)
-            capnphit.write(io)
+            save_hit(io, h, d)
         end
     end
 end
