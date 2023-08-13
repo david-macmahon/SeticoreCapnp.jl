@@ -203,14 +203,13 @@ function OrderedCollections.OrderedDict(s::Stamp)
 end
 
 """
-    load_stamp(filename, offset; kwargs...) -> OrderedDict, Array{ComplexF32,4}
-    load_stamp(io::IO[, offset]; kwargs...) -> OrderedDict, Array{ComplexF32,4}
+    load_stamp(filename, offset; kwargs...) -> OrderedDict, Array{ComplexF32,4}, Int64
+    load_stamp(io::IO[, offset]; kwargs...) -> OrderedDict, Array{ComplexF32,4}, Int64
 
 Load a single `Stamp` from the given `offset` (or current position) within
 `filename` or `io` and return the metadata fields as an
-`OrderedDict{Symbol,Any}` and the complex voltage data of the stamp as an
-`Array{ComplexF32,4}`.  For consistency with `load_hits`, the metadat includes a
-`:fileoffset` entry whose value is `offset`.
+`OrderedDict{Symbol,Any}`, the complex voltage data of the stamp as an
+`Array{ComplexF32,4}`, and the offset from which the stanp was loaded.
 
 The only supported `kwargs` is `traversal_limit_in_words` which sets the
 maximmum size of a stamp.  It default it 2^30 words.
@@ -226,10 +225,8 @@ function load_stamp(io::IO; traversal_limit_in_words=2^30)
     sig = OrderedDict(stamp.signal)
     delete!(sig, :coarseChannel)
     merge!(meta, sig)
-    # Add file offsets
-    meta[:fileoffset] = offset
 
-    meta, data
+    meta, data, offset
 end
 
 function load_stamp(io::IO, offset; traversal_limit_in_words=2^30)
@@ -262,7 +259,8 @@ function load_stamps(stamps_filename; traversal_limit_in_words=2^30)
     meta = OrderedDict{Symbol,Any}[]
     data = Array{ComplexF32,4}[]
     open(stamps_filename) do io
-        for (m,d) in StampsFile(io, traversal_limit_in_words)
+        for (m,d,o) in StampsFile(io, traversal_limit_in_words)
+            m[:fileoffset] = o
             push!(meta, m)
             push!(data, d)
         end

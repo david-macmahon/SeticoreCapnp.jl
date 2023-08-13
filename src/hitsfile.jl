@@ -40,7 +40,7 @@ function Base.IteratorEltype(::Type{HitsFile})
 end
 
 function Base.eltype(::Type{HitsFile})
-    Tuple{OrderedDict{Symbol,Any}, Matrix{Float32}}
+    Tuple{OrderedDict{Symbol,Any}, Matrix{Float32}, Int64}
 end
 
 function Base.isdone(hf::HitsFile, offset=lseek(hf.io))

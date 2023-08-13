@@ -40,7 +40,7 @@ function Base.IteratorEltype(::Type{StampsFile})
 end
 
 function Base.eltype(::Type{StampsFile})
-    Tuple{OrderedDict{Symbol,Any}, Array{Float32,4}}
+    Tuple{OrderedDict{Symbol,Any}, Array{Float32,4}, Int64}
 end
 
 function Base.isdone(sf::StampsFile, offset=lseek(sf.io))

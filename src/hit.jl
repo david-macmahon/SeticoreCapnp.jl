@@ -294,19 +294,18 @@ function OrderedCollections.OrderedDict(h::Hit)
 end
 
 """
-    load_hit(filename, offset; kwargs...) -> OrderedDict, Matrix{Float32}
-    load_hit(io::IO[, offset]; kwargs...) -> OrderedDict, Matrix{Float32}
+    load_hit(filename, offset; kwargs...) -> OrderedDict, Matrix{Float32}, Int64
+    load_hit(io::IO[, offset]; kwargs...) -> OrderedDict, Matrix{Float32}, Int64
 
 Load a single `Hit` from the given `offset` (or current position) within
 `filename` or `io` and return the metadata fields as an
-`OrderedDict{Symbol,Any}` and the "Filterbank" waterfall data as a
-`Matrix{Float32}`.  The metadat includes a `:fileoffset` entry whose value is
-`offset`.
+`OrderedDict{Symbol,Any}`, the "Filterbank" waterfall data as a
+`Matrix{Float32}`, and the offset from which the hit was loaded.
 
 The only supported `kwargs` is `traversal_limit_in_words` which sets the
 maximmum size of a hit.  It default it 2^30 words.
 """
-function load_hit(io::IO; traversal_limit_in_words=2^30)::Tuple{OrderedDict{Symbol,Any},Matrix{Float32}}
+function load_hit(io::IO; traversal_limit_in_words=2^30)::Tuple{OrderedDict{Symbol,Any},Matrix{Float32},Int64}
     offset = lseek(io)
     # At EOF, return empty meta and empty data
     offset == filesize(io) && return OrderedDict{Symbol,Any}(), Float32[;;]
@@ -314,9 +313,8 @@ function load_hit(io::IO; traversal_limit_in_words=2^30)::Tuple{OrderedDict{Symb
     data = getdata(hit)
 
     meta = OrderedDict(hit)
-    meta[:fileoffset] = offset
 
-    meta, data
+    meta, data, offset
 end
 
 function load_hit(io::IO, offset; traversal_limit_in_words=2^30)
@@ -351,13 +349,11 @@ function load_hits(hits_filename; traversal_limit_in_words=2^30, unique=true)
     data = Matrix{Float32}[]
     seen = Set{OrderedDict{Symbol,Any}}()
     open(hits_filename) do io
-        for (m,d) in HitsFile(io, traversal_limit_in_words)
-            if unique
-                offset = pop!(m, :fileoffset)
-                m in seen && continue
-                push!(seen, m)
-                m[:fileoffset] = offset
-            end
+        for (m,d,o) in HitsFile(io, traversal_limit_in_words)
+            # Skip this one if already seen
+            unique && m in seen && continue
+            push!(seen, m)
+            m[:fileoffset] = o
             push!(meta, m)
             push!(data, d)
         end
