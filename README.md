@@ -99,3 +99,93 @@ The `OrderedDict` for stamps contains these keys:
 
 The data for each stamp is an `Array{ComplexF32, 4}` sized as `(numAntennas,
 numPolarizations, numChannels, numTimesteps)`.
+
+## Native Julia interface
+
+Being able to call the Python `capnp` package to read the Hits and Stamps
+files leverages existing code and streamlines development time.  While the
+translation between Julia and Python is easy and almost seamless, it is
+unfortunately not very performant, which limits the scalability of this
+approach.  For example, reading 1 million hits from a single Hits file took over
+45 minutes!  Here is a table showing some timing and memory stats for reading
+various numbers of hits from a single Hits file ranging from 10 hits to 1
+million hits:
+
+|  # Hits |   Time (s)  | Memory allocated | GC percentage |
+|--------:|------------:|-----------------:|--------------:|
+|      10 |    0.021294 |        4.678 MiB |        0.00 % |
+|     100 |    0.256432 |       46.906 MiB |        6.91 % |
+|    1000 |    2.492556 |      469.119 MiB |       10.58 % |
+|   10000 |   24.844329 |        4.591 GiB |       10.29 % |
+|  100000 |  269.365632 |       45.725 GiB |       15.51 % |
+| 1000000 | 2783.571640 |      378.214 GiB |       26.36 % |
+
+To speed things up, a rudamentary generic Capnp parser was written natively in
+Julia and functions to parse Hits and Stamps using their current schemas were
+hand coded (as opposed to being auto-generated from the `hit.capnp` and
+`stamp.capnp` files).  Here are the timing and memory stats for the native Julia
+parser for the same test cases as before:
+
+|  # Hits |   Time (s)  | Memory allocated | GC percentage |
+|--------:|------------:|-----------------:|--------------:|
+|      10 |    0.000210 |      147.812 KiB |        0.00 % |
+|     100 |    0.001541 |        1.441 MiB |        0.00 % |
+|    1000 |    0.018653 |       14.413 MiB |        0.00 % |
+|   10000 |    0.242674 |      144.232 MiB |       23.44 % |
+|  100000 |    2.038773 |        1.406 GiB |        7.60 % |
+| 1000000 |   16.926111 |       11.505 GiB |        6.72 % |
+
+The native Julia Hits and Stamps parser is over two orders of magnitude faster
+than using the Python parser from Julia!
+
+To use the native Julia parser, create a `CapnpReader` object by passing a Hits
+or Stamps filename to the constructor:
+
+```julia
+using SeticoreCapnp
+
+hits_reader = CapnpReader("your_datafile.hits")
+```
+
+The `CapnpReader` object acts as a Julia iterator that provides information on
+each iteration that can be used to construct Hit or Stamp object, as appropraite
+for the data file being parsed.  This is most easily done by using the `map`
+function:
+
+```julia
+hits = map(SeticoreCapnp.Hit, hits_reader)
+```
+
+By default, the `Matrix{Float32}` for the Hit's Filterbank object or the
+`Array{ComplexF32,4}` of the Stamp are populated with the relevant data from the
+Hits or Stamps file.  If these data fields are not immediately relevant, it is
+possible to omit populating them by passing `withdata=false` as a keyward
+argument to the Hit or Stamp constructor methods that accept CapnpReader
+parameters.
+
+### Julia iterator tricks
+
+Because `CapnpReader` acts like a Julia iterator, if can be used with standard
+Julia iterator related functions.  For example, to load only the first `N` Hits,
+one can use the `first` function:
+
+```
+first_N_hits = map(Hit, first(hits_reader, N))
+```
+
+Similarly, to get only the `N`th Hit, one can use `first` in combination with
+`Iterators.drop`:
+
+```
+hit_N = Hit(first(Iterators.drop(hits_reader, N-1)))
+```
+
+These same techniques are equally applicable when working with Stamps files.
+
+## Status of the native Julia interface
+
+Currently the native Julia interface exists as a separate "alternate" way to
+parse Hits and Stamps files.  The "standard" `load_hits` and `load_stamps`
+functions currently use the Python-based technique for loading Hits and Stamps.
+These functions will be changed to use the native Julia interface in a future
+version given the performance benefits that the native Julia interface offers.

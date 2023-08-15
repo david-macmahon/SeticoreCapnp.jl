@@ -66,7 +66,7 @@ struct Stamp
   Metadata for the best hit we found for this stamp.
   Not populated for stamps extracted with the `seticore` CLI tool.
   """
-  signal::Signal
+  signal::Union{Signal,Nothing}
 
   """
   Where the raw file starts in the complete input band (e.g. in the beamforming
@@ -132,6 +132,93 @@ function Stamp(s)
         nant,
         data
     )
+end
+
+"""
+    Stamp((words, widx, segidxs); withdata=true)
+    Stamp(words, widx, segidxs; withdata=true)
+
+Construct a Stamp object by parsing the Capnp frame having segment indices given
+by `segidxs`.  The first Capnp "pointer" of the frame is at index `widx` of
+`words`.  The `words`, `widx`, and `segidxs` can be passed as a tuple (e.g. as
+returned by iterating over a CapnpReader) or as individual parameters.
+
+The `withdata` keyword argument dictates whether the Stamp's data field will be
+populated (`withdata=true`) or empty field (`withdata=false`).
+"""
+function Stamp(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
+                    withdata=true)
+    ptype, offset, ndata, nptrs = parseword(words[widx])
+
+    # A capnp Stamp is a struct with up to 11 (supported) words of data and
+    # up to 5 pointers
+    @assert ptype == CapnpStruct "ptype $ptype @$widx"
+    @assert 0 < ndata <= 11 "ndata $ndata @$widx"
+    @assert 0 < nptrs <=  5 "nptrs $nptrs @$widx"
+
+    # Data index
+    didx = widx + 1 + offset
+
+    ra               =                load_value(Float64, words, didx,    1)
+    dec              = (ndata >  1) ? load_value(Float64, words, didx+ 1, 1) : 0.0
+    fch1             = (ndata >  2) ? load_value(Float64, words, didx+ 2, 1) : 0.0
+    foff             = (ndata >  3) ? load_value(Float64, words, didx+ 3, 1) : 0.0
+    tstart           = (ndata >  4) ? load_value(Float64, words, didx+ 4, 1) : 0.0
+    tsamp            = (ndata >  5) ? load_value(Float64, words, didx+ 5, 1) : 0.0
+    telescopeId      = (ndata >  6) ? load_value(Int32,   words, didx+ 6, 1) : Int32(0)
+    numTimesteps     = (ndata >  6) ? load_value(Int32,   words, didx+ 6, 2) : Int32(0)
+    numChannels      = (ndata >  7) ? load_value(Int32,   words, didx+ 7, 1) : Int32(0)
+    numPolarizations = (ndata >  7) ? load_value(Int32,   words, didx+ 7, 2) : Int32(0)
+    numAntennas      = (ndata >  8) ? load_value(Int32,   words, didx+ 8, 1) : Int32(0)
+    coarseChannel    = (ndata >  8) ? load_value(Int32,   words, didx+ 8, 2) : Int32(0)
+    fftSize          = (ndata >  9) ? load_value(Int32,   words, didx+ 9, 1) : Int32(0)
+    startChannel     = (ndata >  9) ? load_value(Int32,   words, didx+ 9, 2) : Int32(0)
+    schan            = (ndata > 10) ? load_value(Int32,   words, didx+10, 1) : Int32(0)
+
+    # Pointer index
+    pidx = didx + ndata
+
+    sourceName = load_string(words, pidx)
+    if withdata && nptrs > 1
+        data = Array{ComplexF32,4}(undef, numAntennas, numPolarizations,
+                                          numChannels, numTimesteps)
+        load_data!(reinterpret(Float32, data), words, pidx+1, segidxs)
+    else
+        data = Float32[;;;;]
+    end
+
+    seticoreVersion = nptrs > 2 ? load_string(words, pidx+2) : ""
+    signal = nptrs > 3 ? Signal(words, pidx+3, segidxs) : nothing
+    obsid = nptrs > 4 ? load_string(words, pidx+4) : ""
+
+    Stamp(
+        seticoreVersion,
+        sourceName,
+        ra,
+        dec,
+        fch1,
+        foff,
+        tstart,
+        tsamp,
+        telescopeId,
+        coarseChannel,
+        fftSize,
+        startChannel,
+        signal,
+        schan,
+        obsid,
+        numTimesteps,
+        numChannels,
+        numPolarizations,
+        numAntennas,
+        data
+    )
+end
+
+function Stamp(p::Tuple{Vector{UInt64}, Int64, Tuple{Int64,Vararg{Int64}}};
+             withdata=true)
+    words, widx, segidxs = p
+    Stamp(words, widx, segidxs; withdata)
 end
 
 """

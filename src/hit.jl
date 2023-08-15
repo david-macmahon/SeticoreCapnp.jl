@@ -70,7 +70,7 @@ end
     Signal(s)
 Construct a `Signal` from capnp object `s`.
 """
-function Signal(s)
+function Signal(s::PyObject)
     Signal(
         convert(Float64, s.frequency),
         convert(Int32,   s.index),
@@ -82,6 +82,43 @@ function Signal(s)
         convert(Int32,   s.numTimesteps),
         convert(Float32, s.power),
         convert(Float32, s.incoherentPower),
+    )
+end
+
+function Signal(words::Vector{UInt64}, widx::Int64, _::Tuple{Int64,Vararg{Int64}})
+    ptype, offset, ndata, nptrs = parseword(words[widx])
+
+    # A capnp Signal is a struct with up to 6 (supported) words of data and zero
+    # pointers
+    @assert ptype == CapnpStruct "ptype $ptype @$widx"
+    @assert 0 < ndata <= 6 "ndata $ndata @$widx"
+    @assert nptrs == 0 "nptrs $nptrs @$widx"
+
+    # Data index
+    didx = widx + 1 + offset
+
+    frequency       =               load_value(Float64, words, didx,   1)
+    index           = (ndata > 1) ? load_value(Int32,   words, didx+1, 1) : Int32(0)
+    driftSteps      = (ndata > 1) ? load_value(Int32,   words, didx+1, 2) : Int32(0)
+    driftRate       = (ndata > 2) ? load_value(Float64, words, didx+2, 1) : 0.0
+    snr             = (ndata > 3) ? load_value(Float32, words, didx+3, 1) : 0.0f0
+    coarseChannel   = (ndata > 3) ? load_value(Int32,   words, didx+3, 2) : Int32(0)
+    beam            = (ndata > 4) ? load_value(Int32,   words, didx+4, 1) : Int32(0)
+    numTimesteps    = (ndata > 4) ? load_value(Int32,   words, didx+4, 2) : Int32(0)
+    power           = (ndata > 5) ? load_value(Float32, words, didx+5, 1) : 0.0f0
+    incoherentPower = (ndata > 5) ? load_value(Float32, words, didx+5, 2) : 0.0f0
+    
+    Signal(
+        frequency,
+        index,
+        driftSteps,
+        driftRate,
+        snr,
+        coarseChannel,
+        beam,
+        numTimesteps,
+        power,
+        incoherentPower
     )
 end
 
@@ -193,6 +230,61 @@ function Filterbank(f)
     )
 end
 
+function Filterbank(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
+                    withdata=true)
+    ptype, offset, ndata, nptrs = parseword(words[widx])
+
+    # A capnp Filterbank is a struct with up to 9 (supported) words of data and
+    # 2 pointers (sourceName and data)
+    @assert ptype == CapnpStruct "ptype $ptype @$widx"
+    @assert 0 < ndata <= 9 "ndata $ndata @$widx"
+    @assert nptrs == 2 "nptrs $nptrs @$widx"
+
+    # Data index
+    didx = widx + 1 + offset
+
+    fch1          =               load_value(Float64, words, didx,   1)
+    foff          = (ndata > 1) ? load_value(Float64, words, didx+1, 1) : 0.0
+    tstart        = (ndata > 2) ? load_value(Float64, words, didx+2, 1) : 0.0
+    tsamp         = (ndata > 3) ? load_value(Float64, words, didx+3, 1) : 0.0
+    ra            = (ndata > 4) ? load_value(Float64, words, didx+4, 1) : 0.0
+    dec           = (ndata > 5) ? load_value(Float64, words, didx+5, 1) : 0.0
+    telescopeId   = (ndata > 6) ? load_value(Int32,   words, didx+6, 1) : Int32(0)
+    numTimesteps  = (ndata > 6) ? load_value(Int32,   words, didx+6, 2) : Int32(0)
+    numChannels   = (ndata > 7) ? load_value(Int32,   words, didx+7, 1) : Int32(0)
+    coarseChannel = (ndata > 7) ? load_value(Int32,   words, didx+7, 2) : Int32(0)
+    startChannel  = (ndata > 8) ? load_value(Int32,   words, didx+8, 1) : Int32(0)
+    beam          = (ndata > 8) ? load_value(Int32,   words, didx+8, 2) : Int32(0)
+
+    # Pointer index
+    pidx = didx + ndata
+
+    sourceName = load_string(words, pidx)
+    if withdata
+        data = Matrix{Float32}(undef, numChannels, numTimesteps)
+        load_data!(data, words, pidx+1, segidxs)
+    else
+        data = Float32[;;]
+    end
+
+    Filterbank(
+        sourceName,
+        fch1,
+        foff,
+        tstart,
+        tsamp,
+        ra,
+        dec,
+        telescopeId,
+        numTimesteps,
+        numChannels,
+        data,
+        coarseChannel,
+        startChannel,
+        beam
+    )
+end
+
 """
     Filterbank(d::AbstractDict, data::Array)
 
@@ -266,11 +358,48 @@ end
     Hit(h)
 Construct a `Hit` from capnp object `h`.
 """
-function Hit(h)
+function Hit(h::PyObject)
     Hit(
-        Signal(h.signal),
-        Filterbank(h.filterbank)
+        Signal(h.signal::PyObject),
+        Filterbank(h.filterbank::PyObject)
     )
+end
+
+"""
+    Hit((words, widx, segidxs); withdata=true)
+    Hit(words, widx, segidxs; withdata=true)
+
+Construct a Hit object by parsing the Capnp frame having segment indices given
+by `segidxs`.  The first Capnp "pointer" of the frame is at index `widx` of
+`words`.  The `words`, `widx`, and `segidxs` can be passed as a tuple (e.g. as
+returned by iterating over a CapnpReader) or as individual parameters.
+
+The `withdata` keyword argument dictates whether the Hit's Filterbank component
+will have a populated `data` field (`withdata=true`) or an empty `data`
+field (`withdata=false`).
+"""
+function Hit(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
+             withdata=true)
+    ptype, offset, ndata, nptrs = parseword(words[widx])
+
+    # A capnp Hit is a struct with zero data values and two pointers (structs)
+    @assert ptype == CapnpStruct "ptype $ptype @$widx"
+    @assert ndata == 0 "ndata $ndata @$widx"
+    @assert nptrs == 2 "nptrs $nptrs @$widx"
+
+    # Pointer index
+    pidx = widx + 1 + offset + ndata
+
+    signal     = Signal(    words, pidx,   segidxs)
+    filterbank = Filterbank(words, pidx+1, segidxs; withdata)
+
+    Hit(signal, filterbank)
+end
+
+function Hit(p::Tuple{Vector{UInt64}, Int64, Tuple{Int64,Vararg{Int64}}};
+             withdata=true)
+    words, widx, segidxs = p
+    Hit(words, widx, segidxs; withdata)
 end
 
 function getdata(h::Hit)
@@ -309,7 +438,7 @@ function load_hit(io::IO; traversal_limit_in_words=2^30)::Tuple{OrderedDict{Symb
     offset = lseek(io)
     # At EOF, return empty meta and empty data
     offset == filesize(io) && return OrderedDict{Symbol,Any}(), Float32[;;]
-    hit = Hit(SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words))
+    hit = Hit(SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words)::PyObject)
     data = getdata(hit)
 
     meta = OrderedDict(hit)
@@ -344,10 +473,11 @@ The only supported `kwargs` are `traversal_limit_in_words` which sets the
 maximmum size of a hit (defaults to 2^30 words) and `unique` which makes the
 function return only unique hits when `true` (the default).
 """
-function load_hits(hits_filename; traversal_limit_in_words=2^30, unique=true)
+function load_hits(hits_filename; traversal_limit_in_words=2^30, unique=true, limit=0)
     meta = OrderedDict{Symbol,Any}[]
     data = Matrix{Float32}[]
     seen = Set{OrderedDict{Symbol,Any}}()
+    (limit <= 0) && (limit = typemax(Int64))
     open(hits_filename) do io
         for (m,d,o) in HitsFile(io, traversal_limit_in_words)
             # Skip this one if already seen
@@ -356,6 +486,8 @@ function load_hits(hits_filename; traversal_limit_in_words=2^30, unique=true)
             m[:fileoffset] = o
             push!(meta, m)
             push!(data, d)
+            limit -= 1
+            limit == 0 && break
         end
     end
 
