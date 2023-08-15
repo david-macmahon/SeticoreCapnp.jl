@@ -43,6 +43,10 @@ end
 
 function load_value(::Type{T}, words::Vector{UInt64}, widx::Int64, tidx::Int64)::T where {
         T<:Union{UInt8,Int8,UInt16,Int16,UInt32,Int32,UInt64,Int64,Float32,Float64}}
+    # Bounds check
+    nw = cld(tidx * sizeof(T), sizeof(UInt64))
+    checkbounds(words, widx + nw - 1)
+
     # Use pointer and unsafe_load to avoid creating views/ReinterpretArrays.
     # Get `p` as a pointer to type T, starting at words[widx]
     p = Ptr{T}(pointer(words, widx))
@@ -59,6 +63,10 @@ function load_string(words::Vector{UInt64}, widx::Int64)
 
     # Data index
     didx = widx + offset + 1
+
+    # Bounds check
+    nw = cld(len-1, sizeof(UInt64))
+    checkbounds(words, didx + nw - 1)
 
     # Use pointer and unsafe_string to avoid creating views/ReinterpretArrays.
     p = Ptr{UInt8}(pointer(words, didx))
@@ -92,6 +100,11 @@ function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
 
     # Data index
     didx = widx + offset + 1
+
+    # Bounds check src and dest
+    nw = cld(len * sizeof(T), sizeof(UInt64))
+    checkbounds(words, didx + nw - 1)
+    checkbounds(dest, len) # redundant when @assert is enabled
 
     # Use pointer and unsafe_copyto! to avoid creating views/ReinterpretArrays.
     p = Ptr{T}(pointer(words, didx))
