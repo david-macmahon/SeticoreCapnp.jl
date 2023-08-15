@@ -133,6 +133,16 @@ function CapnpReader(fname::AbstractString)
     CapnpReader(mmap(fname, Vector{UInt64}; shared=false))
 end
 
+"""
+    finalize(c::CapnpReader)
+
+Calls `finalize` on `c.words` to "mummap" the data array (and close the
+underlying file).
+"""
+function Base.finalize(c::CapnpReader)
+    finalize(c.words)
+end
+
 function Base.show(io::IO, cr::CapnpReader)
     print(io, "CapnpReader($(length(cr.words)) words)")
 end
