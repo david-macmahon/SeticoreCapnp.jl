@@ -86,6 +86,8 @@ function Signal(s::PyObject)
 end
 
 function Signal(words::Vector{UInt64}, widx::Int64, _::Tuple{Int64,Vararg{Int64}})
+    @debug "Signal @$widx"
+
     ptype, offset, ndata, nptrs = parseword(words[widx])
 
     # A capnp Signal is a struct with up to 6 (supported) words of data and zero
@@ -232,6 +234,8 @@ end
 
 function Filterbank(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
                     withdata=true)
+    @debug "Filterbank @$widx"
+
     ptype, offset, ndata, nptrs = parseword(words[widx])
 
     # A capnp Filterbank is a struct with up to 9 (supported) words of data and
@@ -380,6 +384,8 @@ field (`withdata=false`).
 """
 function Hit(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
              withdata=true)
+    @debug "Hit @$widx"
+
     ptype, offset, ndata, nptrs = parseword(words[widx])
 
     # A capnp Hit is a struct with zero data values and two pointers (structs)

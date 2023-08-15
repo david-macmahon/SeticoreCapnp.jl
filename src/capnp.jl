@@ -101,6 +101,7 @@ function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
 end
 
 function segment_sizes(capnp::Vector{UInt64}, widx)
+    @debug "frame @$widx"
     numsegs = load_value(UInt32, capnp, widx, 1) + 1
     ntuple(i->load_value(UInt32, capnp, widx, i+1), numsegs)
 end

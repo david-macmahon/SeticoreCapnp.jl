@@ -148,6 +148,8 @@ populated (`withdata=true`) or empty field (`withdata=false`).
 """
 function Stamp(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
                     withdata=true)
+    @debug "Stamp @$widx"
+
     ptype, offset, ndata, nptrs = parseword(words[widx])
 
     # A capnp Stamp is a struct with up to 11 (supported) words of data and
