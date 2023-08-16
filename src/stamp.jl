@@ -289,6 +289,13 @@ const StampDictFields = (
     :numAntennas
 )
 
+function Core.NamedTuple(s::Stamp)
+    NamedTuple(Iterators.flatten((
+        (k=>getfield(s,        k) for k in StampDictFields),
+        (k=>getfield(s.signal, k) for k in SignalDictFields)
+    )))
+end
+
 function OrderedCollections.OrderedDict{Symbol,Any}(s::Stamp)
     d = OrderedDict{Symbol,Any}(
         StampDictFields .=> getfield.(Ref(s), StampDictFields)

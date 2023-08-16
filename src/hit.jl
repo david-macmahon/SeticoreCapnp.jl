@@ -419,6 +419,13 @@ function getdata(h::Hit)
     getdata(h.filterbank)
 end
 
+function Core.NamedTuple(h::Hit)
+    NamedTuple(Iterators.flatten((
+        (k=>getfield(h.signal,     k) for k in SignalDictFields),
+        (k=>getfield(h.filterbank, k) for k in FilterbankDictFields)
+    )))
+end
+
 function OrderedCollections.OrderedDict{Symbol,Any}(h::Hit)
     if h.signal === nothing && h.filterbank === nothing
         OrderedDict{Symbol,Any}()
