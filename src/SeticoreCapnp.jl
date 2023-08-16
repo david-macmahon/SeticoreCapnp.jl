@@ -3,7 +3,7 @@ module SeticoreCapnp
 export load_hits, load_hit
 export save_hits
 export load_stamps, load_stamp
-export CapnpReader
+export CapnpReader, Hit, Stamp
 
 using Mmap
 using PyCall
