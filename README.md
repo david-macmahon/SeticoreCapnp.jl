@@ -104,8 +104,8 @@ numPolarizations, numChannels, numTimesteps)`.
 
 Being able to call the Python `capnp` package to read the Hits and Stamps
 files leverages existing code and streamlines development time.  While the
-translation between Julia and Python is easy and almost seamless, it is
-unfortunately not very performant, which limits the scalability of this
+translation between Julia and Python is easy and almost seamless, the overall
+performance is unfortunately not good, which limits the scalability of this
 approach.  For example, reading 1 million hits from a single Hits file took over
 45 minutes!  Here is a table showing some timing and memory stats for reading
 various numbers of hits from a single Hits file ranging from 10 hits to 1
@@ -149,19 +149,24 @@ hits_reader = CapnpReader("your_datafile.hits")
 
 The `CapnpReader` object acts as a Julia iterator that provides information on
 each iteration that can be used to construct Hit or Stamp object, as appropraite
-for the data file being parsed.  This is most easily done by using the `map`
-function:
+for the data file being parsed.  This can be done by using any Julia function
+that works with iterators.  For example, the `map` function can be used to
+create a Vector of Hit objects:
 
 ```julia
+# hits will be a Vector of Hit objects (aka Vector{Hit})
 hits = map(SeticoreCapnp.Hit, hits_reader)
 ```
 
-By default, the `Matrix{Float32}` for the Hit's Filterbank object or the
-`Array{ComplexF32,4}` of the Stamp are populated with the relevant data from the
-Hits or Stamps file.  If these data fields are not immediately relevant, it is
-possible to omit populating them by passing `withdata=false` as a keyward
-argument to the Hit or Stamp constructor methods that accept CapnpReader
-parameters.
+### Omitting data
+
+By default, the `data` field of a Hit's Filterbank object or a Stamp is
+populated with the relevant data from the Hits or Stamps file.  If the data
+field is not immediately relevant, it is possible to omit populating it by
+passing `withdata=false` as a keyword argument to the Hit or Stamp constructor
+methods that accept `CapnpReader` parameters.  When `withdata=false` is passed
+the `data` field will still be an Array of the appropriate type, but it will be
+zero sized in all dimensions.
 
 ### Julia iterator tricks
 
@@ -182,7 +187,20 @@ hit_N = Hit(first(Iterators.drop(hits_reader, N-1)))
 
 These same techniques are equally applicable when working with Stamps files.
 
-## Status of the native Julia interface
+### Finalizing CapnpReader objects
+
+`CapnpReader` uses `mmap` to access the data of the hits and stamps files.  This
+creates an Array whose data get automatically paged into memory (i.e. read from
+disk) as they are accessed.  The process must therefore hold open the underlying
+file.  When the Array eventually gets finalized, the memory is "munmap"ed, which
+closes the file.  For more control over when the file gets closed, it is
+possible to `finalize` the `CapnpReader` object directly which will call
+`finalize` on the data Array.
+
+NB: Using the `CapnpReader` object after calling finalize on it is an error and
+the process will segfault (i.e. crash)!
+
+### Status of the native Julia interface
 
 Currently the native Julia interface exists as a separate "alternate" way to
 parse Hits and Stamps files.  The "standard" `load_hits` and `load_stamps`
