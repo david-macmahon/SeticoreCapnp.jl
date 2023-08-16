@@ -296,6 +296,16 @@ function Core.NamedTuple(s::Stamp)
     )))
 end
 
+# For offset_factory/index_factory output
+function Core.NamedTuple(t::Tuple{Stamp,Int64}, key=:fileoffset)
+    s, v = t
+    NamedTuple(Iterators.flatten((
+        (k=>getfield(s,        k) for k in StampDictFields),
+        (k=>getfield(s.signal, k) for k in SignalDictFields),
+        (key=>v,)
+    )))
+end
+
 function OrderedCollections.OrderedDict{Symbol,Any}(s::Stamp)
     d = OrderedDict{Symbol,Any}(
         StampDictFields .=> getfield.(Ref(s), StampDictFields)

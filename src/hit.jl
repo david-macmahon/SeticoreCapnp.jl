@@ -426,6 +426,16 @@ function Core.NamedTuple(h::Hit)
     )))
 end
 
+# For offset_factory/index_factory output
+function Core.NamedTuple(t::Tuple{Hit,Int64}, key=:fileoffset)
+    h, v = t
+    NamedTuple(Iterators.flatten((
+        (k=>getfield(h.signal,     k) for k in SignalDictFields),
+        (k=>getfield(h.filterbank, k) for k in FilterbankDictFields),
+        (key=>v,)
+    )))
+end
+
 function OrderedCollections.OrderedDict{Symbol,Any}(h::Hit)
     if h.signal === nothing && h.filterbank === nothing
         OrderedDict{Symbol,Any}()

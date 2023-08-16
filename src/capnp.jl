@@ -163,58 +163,150 @@ function capnp_frame(::Type{T}, words::Vector{UInt64}, fidx::Int64; kwargs...)::
     T(words, sidxs[1], sidxs; kwargs...)
 end
 
+# Default factory methods
+
+const FactoryTuple = Tuple{Vector{UInt64}, Int64}
+
+function default_factory(::Type{Tuple}, t::FactoryTuple)
+    t
+end
+
+function default_factory(::Type{T}, t::FactoryTuple)::T where T
+    T(t)
+end
+
+# No-data factory functions
+
+function nodata_factory(::Type{T}, t::FactoryTuple)::T where T
+    T(t; withdata=false)
+end
+
+function offset_factory(::Type{T}, t::FactoryTuple)::Tuple{T, Int64} where T
+    fidx = t[2]
+    (T(t; withdata=false), 8*(fidx-1))
+end
+
+function index_factory(::Type{T}, t::FactoryTuple)::Tuple{T, Int64} where T
+    fidx = t[2]
+    (T(t; withdata=false), fidx)
+end
+
 # CapnpReader
 
-struct CapnpReader
+struct CapnpReader{T,F}
     words::Vector{UInt64}
 end
 
-function CapnpReader(io::IO)
-    CapnpReader(mmap(io, Vector{UInt64}; shared=false))
+"""
+    CapnpReader(src)
+    CapnpReader(type, src)
+    CapnpReader(factory, type, src)
+
+Construct a `CapnpReader{type,factory}` object for the data represented by
+`src`, which can be an `AbstractString` (treated as a file name), an `IO`
+onject, or a `Vector{UInt64}`.  If not given, `factory` defaults to
+`default_factory` and `type` defaults to `Tuple`.
+"""
+function CapnpReader(factory::Function, ::Type{T}, words::Vector{UInt64}) where T
+    CapnpReader{T,factory}(words)
 end
 
-function CapnpReader(fname::AbstractString)
-    CapnpReader(mmap(fname, Vector{UInt64}; shared=false))
+function CapnpReader(::Type{T}, words::Vector{UInt64}) where T
+    CapnpReader(default_factory, T, words)
+end
+
+function CapnpReader(words::Vector{UInt64})
+    CapnpReader(Tuple, words)
+end
+
+function CapnpReader(factory::Function, ::Type{T}, src::Union{IO,AbstractString}) where T
+    CapnpReader{T,factory}(mmap(src, Vector{UInt64}; shared=false))
+end
+
+function CapnpReader(::Type{T}, src::Union{IO,AbstractString}) where T
+    CapnpReader(default_factory, T, src)
+end
+
+function CapnpReader(src::Union{AbstractString,IO})
+    CapnpReader(mmap(src, Vector{UInt64}; shared=false))
 end
 
 """
-    finalize(c::CapnpReader)
+    finalize(c::CapnpReader{T,F})
 
 Calls `finalize` on `c.words` to "mummap" the data array (and close the
 underlying file).
 """
-function Base.finalize(c::CapnpReader)
+function Base.finalize(c::CapnpReader{T,F}) where {T,F}
     finalize(c.words)
 end
 
-function Base.show(io::IO, cr::CapnpReader)
-    print(io, "CapnpReader($(length(cr.words)) words)")
+function Base.show(io::IO, c::CapnpReader{T,F}) where {T,F}
+    print(io, "CapnpReader{$T,$F}($(length(c.words)) words)")
 end
 
 # Capnp frame iteration
 
-function Base.iterate(iter::CapnpReader, fidx::Int64=1)
+function Base.iterate(iter::CapnpReader{T,F}, fidx::Int64=1) where {T,F}
     Base.isdone(iter, fidx) && return nothing
 
-    sizes = segment_sizes(iter.words, fidx)
-    nw = cld(length(sizes)+1, 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
-    nextfidx = (fidx + nw + sum(sizes)) % Int64
-    #@show fidx nw sizes nextfidx
-    (iter.words, fidx), nextfidx
+    seg_sizes = segment_sizes(iter.words, fidx)
+    hdr_size = cld(length(seg_sizes)+1, 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
+    nextfidx = (fidx + hdr_size + sum(seg_sizes)) % Int64
+    #@show fidx hdr_size seg_sizes nextfidx
+    F(T, (iter.words, fidx)), nextfidx
 end
 
-function Base.IteratorSize(::Type{CapnpReader})
+function Base.IteratorSize(::Type{CapnpReader{T,F}}) where {T,F}
     Base.SizeUnknown()
 end
 
-function Base.IteratorEltype(::Type{CapnpReader})
+function Base.isdone(iter::CapnpReader{T,F}, widx) where {T,F}
+    widx > length(iter.words)
+end
+
+# eltype is return type of factory method, which can be anything for arbitrary
+# factory functions.
+function Base.IteratorEltype(::Type{CapnpReader{T,F}}) where {T,F}
+    Base.EltypeUnknown()
+end
+
+# Default factory eltype
+
+function Base.IteratorEltype(::Type{CapnpReader{T,default_factory}}) where {T}
     Base.HasEltype()
 end
 
-function Base.eltype(::Type{CapnpReader})
-    Tuple{Vector{UInt64}, Int64}
+function Base.eltype(::Type{CapnpReader{T,default_factory}}) where {T}
+    T
 end
 
-function Base.isdone(iter::CapnpReader, widx)
-    widx > length(iter.words)
+# No-data factory eltype
+
+function Base.IteratorEltype(::Type{CapnpReader{T,nodata_factory}}) where {T}
+    Base.HasEltype()
+end
+
+function Base.eltype(::Type{CapnpReader{T,nodata_factory}}) where {T}
+    T
+end
+
+# Offset factory eltype
+
+function Base.IteratorEltype(::Type{CapnpReader{T,offset_factory}}) where {T}
+    Base.HasEltype()
+end
+
+function Base.eltype(::Type{CapnpReader{T,offset_factory}}) where {T}
+    Tuple{T, Int64}
+end
+
+# Index factory eltype
+
+function Base.IteratorEltype(::Type{CapnpReader{T,index_factory}}) where {T}
+    Base.HasEltype()
+end
+
+function Base.eltype(::Type{CapnpReader{T,index_factory}}) where {T}
+    Tuple{T, Int64}
 end
