@@ -227,8 +227,8 @@ function Stamp(words::Vector{UInt64}, fidx::Int64; withdata=true)
     capnp_frame(Stamp, words, fidx; withdata)
 end
 
-function Stamp(p::Tuple{Vector{UInt64}, Int64}; withdata=true)
-    Stamp(p...; withdata)
+function Stamp(t::Tuple{Vector{UInt64}, Int64}; withdata=true)
+    Stamp(t...; withdata)
 end
 
 

@@ -411,8 +411,8 @@ function Hit(words::Vector{UInt64}, fidx::Int64; withdata=true)
     capnp_frame(Hit, words, fidx; withdata)
 end
 
-function Hit(p::Tuple{Vector{UInt64}, Int64}; withdata=true)
-    Hit(p...; withdata)
+function Hit(t::Tuple{Vector{UInt64}, Int64}; withdata=true)
+    Hit(t...; withdata)
 end
 
 function getdata(h::Hit)
