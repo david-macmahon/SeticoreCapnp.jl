@@ -70,7 +70,7 @@ end
     Signal(s)
 Construct a `Signal` from capnp object `s`.
 """
-function Signal(s::PyObject)
+function Signal(s)
     Signal(
         convert(Float64, s.frequency),
         convert(Int32,   s.index),
@@ -362,10 +362,10 @@ end
     Hit(h)
 Construct a `Hit` from capnp object `h`.
 """
-function Hit(h::PyObject)
+function Hit(h)
     Hit(
-        Signal(h.signal::PyObject),
-        Filterbank(h.filterbank::PyObject)
+        Signal(h.signal),
+        Filterbank(h.filterbank)
     )
 end
 
@@ -444,7 +444,7 @@ function load_hit(io::IO; traversal_limit_in_words=2^30)::Tuple{OrderedDict{Symb
     offset = lseek(io)
     # At EOF, return empty meta and empty data
     offset == filesize(io) && return OrderedDict{Symbol,Any}(), Float32[;;]
-    hit = Hit(SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words)::PyObject)
+    hit = Hit(SeticoreCapnp.CapnpHit[].Hit.read(io; traversal_limit_in_words))
     data = getdata(hit)
 
     meta = OrderedDict(hit)
