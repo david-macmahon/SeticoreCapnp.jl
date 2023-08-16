@@ -186,7 +186,7 @@ function Stamp(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{I
                                           numChannels, numTimesteps)
         load_data!(reinterpret(Float32, data), words, pidx+1, segidxs)
     else
-        data = Float32[;;;;]
+        data = ComplexF32[;;;;]
     end
 
     seticoreVersion = nptrs > 2 ? load_string(words, pidx+2) : ""
