@@ -7,7 +7,7 @@ complex voltages.
 """
 struct Stamp
   """
-  The seticore version that generated this data.     
+  The seticore version that generated this data.
   """
   seticoreVersion::String
 
@@ -32,7 +32,7 @@ struct Stamp
   tstart::Float64
   tsamp::Float64
   telescopeId::Int32
- 
+
   # Metadata describing how exactly we extracted this stamp.
 
   """
@@ -87,7 +87,7 @@ struct Stamp
   numChannels::Int32
   numPolarizations::Int32
   numAntennas::Int32
- 
+
   """
   An array of complex voltages.
   Indexed as `[antenna, polarization, channel, time]`

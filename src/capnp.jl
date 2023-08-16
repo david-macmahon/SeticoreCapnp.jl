@@ -83,7 +83,7 @@ function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
 
         # For now we don't support "double landing pad"
         @assert lpsize == 0 "double landing pad not supported @$widx"
-        
+
         # Calcualte landing pad index
         lidx = segidxs[segid+1] + segoffset
         #@show lidx

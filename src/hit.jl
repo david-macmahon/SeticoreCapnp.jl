@@ -10,24 +10,24 @@ struct Signal
     The frequency the hit starts at
     """
     frequency::Float64
-  
+
     """
     Which frequency bin the hit starts at.
     This is relative to the coarse channel.
     """
     index::Int32
-  
+
     """
     How many bins the hit drifts over.  This counts the drift distance over the
     full rounded-up power-of-two time range.
     """
     driftSteps::Int32
-  
+
     """
     The drift rate in Hz/s
     """
     driftRate::Float64
-  
+
     """
     The signal-to-noise ratio for the hit
     ```
@@ -35,12 +35,12 @@ struct Signal
     ````
     """
     snr::Float32
-  
+
     """
     Which coarse channel this hit is in
     """
     coarseChannel::Int32
-  
+
     """
     Which beam this hit is in. -1 for incoherent beam, or no beam
     """
@@ -109,7 +109,7 @@ function Signal(words::Vector{UInt64}, widx::Int64, _::Tuple{Int64,Vararg{Int64}
     numTimesteps    = (ndata > 4) ? load_value(Int32,   words, didx+4, 2) : Int32(0)
     power           = (ndata > 5) ? load_value(Float32, words, didx+5, 1) : 0.0f0
     incoherentPower = (ndata > 5) ? load_value(Float32, words, didx+5, 2) : 0.0f0
-    
+
     Signal(
         frequency,
         index,
