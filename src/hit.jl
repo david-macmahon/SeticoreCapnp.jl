@@ -232,7 +232,7 @@ function Filterbank(f)
     )
 end
 
-function Filterbank(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
+function Filterbank(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Vararg{Int64}};
                     withdata=true)
     @debug "Filterbank @$widx"
 
@@ -266,7 +266,7 @@ function Filterbank(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Var
     sourceName = load_string(words, pidx)
     if withdata
         data = Matrix{Float32}(undef, numChannels, numTimesteps)
-        load_data!(data, words, pidx+1, segidxs)
+        load_data!(data, words, pidx+1, sidxs)
     else
         data = Float32[;;]
     end
@@ -370,19 +370,24 @@ function Hit(h)
 end
 
 """
-    Hit((words, widx, segidxs); withdata=true)
-    Hit(words, widx, segidxs; withdata=true)
+    Hit((words, fidx::Int64); withdata=true)
+    Hit(words, fidx::Int64; withdata=true)
+    Hit(words, widx::Int64, sidxs::Tuple{Int64,...}; withdata=true)
 
-Construct a Hit object by parsing the Capnp frame having segment indices given
-by `segidxs`.  The first Capnp "pointer" of the frame is at index `widx` of
-`words`.  The `words`, `widx`, and `segidxs` can be passed as a tuple (e.g. as
-returned by iterating over a CapnpReader) or as individual parameters.
+Construct a Hit object by parsing the Capnp frame starting at `words[fidx]` and
+having segment indices of `words` given by `sidxs`.  The methods with `fidx`
+call `capnp_frame` which calls the Hit constructor that takes `widx` and
+`sidxs`.  For the methods with `fidx`, `words` and `fidx` can be passed as a
+tuple (e.g. as returned by iterating over a CapnpReader) or as individual
+parameters.  The first Capnp "pointer" of the frame is at `words[sidxs[1]]`.
+The first Capnp pointer for the Hit being constructed is at `words[widx]`, which
+may very well be the same as `words[sidxs[1]]`.
 
 The `withdata` keyword argument dictates whether the Hit's Filterbank component
 will have a populated `data` field (`withdata=true`) or an empty `data`
 field (`withdata=false`).
 """
-function Hit(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
+function Hit(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Vararg{Int64}};
              withdata=true)
     @debug "Hit @$widx"
 
@@ -396,16 +401,18 @@ function Hit(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int
     # Pointer index
     pidx = widx + 1 + offset + ndata
 
-    signal     = Signal(    words, pidx,   segidxs)
-    filterbank = Filterbank(words, pidx+1, segidxs; withdata)
+    signal     = Signal(    words, pidx,   sidxs)
+    filterbank = Filterbank(words, pidx+1, sidxs; withdata)
 
     Hit(signal, filterbank)
 end
 
-function Hit(p::Tuple{Vector{UInt64}, Int64, Tuple{Int64,Vararg{Int64}}};
-             withdata=true)
-    words, widx, segidxs = p
-    Hit(words, widx, segidxs; withdata)
+function Hit(words::Vector{UInt64}, fidx::Int64; withdata=true)
+    capnp_frame(Hit, words, fidx; withdata)
+end
+
+function Hit(p::Tuple{Vector{UInt64}, Int64}; withdata=true)
+    Hit(p...; withdata)
 end
 
 function getdata(h::Hit)

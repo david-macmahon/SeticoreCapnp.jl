@@ -135,18 +135,24 @@ function Stamp(s)
 end
 
 """
-    Stamp((words, widx, segidxs); withdata=true)
-    Stamp(words, widx, segidxs; withdata=true)
+    Stamp((words, fidx::Int64); withdata=true)
+    Stamp(words, fidx::Int64; withdata=true)
+    Stamp(words, widx::Int64, sidxs::Tuple{Int64,...}; withdata=true)
 
-Construct a Stamp object by parsing the Capnp frame having segment indices given
-by `segidxs`.  The first Capnp "pointer" of the frame is at index `widx` of
-`words`.  The `words`, `widx`, and `segidxs` can be passed as a tuple (e.g. as
-returned by iterating over a CapnpReader) or as individual parameters.
+Construct a Stamp object by parsing the Capnp frame starting at `words[fidx]`
+and having segment indices of `words` given by `sidxs`.  The methods with `fidx`
+call `capnp_frame` which calls the Stamp constructor that takes `widx` and
+`sidxs`.  For the methods with `fidx`, `words` and `fidx` can be passed as a
+tuple (e.g. as returned by iterating over a CapnpReader) or as individual
+parameters.  The first Capnp "pointer" of the frame is at `words[sidxs[1]]`.
+The first Capnp pointer for the Stamp being constructed is at `words[widx]`,
+which may very well be the same as `words[sidxs[1]]`.
 
-The `withdata` keyword argument dictates whether the Stamp's data field will be
-populated (`withdata=true`) or empty field (`withdata=false`).
+The `withdata` keyword argument dictates whether the Stamp's Filterbank
+component will have a populated `data` field (`withdata=true`) or an empty
+`data` field (`withdata=false`).
 """
-function Stamp(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{Int64}};
+function Stamp(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Vararg{Int64}};
                     withdata=true)
     @debug "Stamp @$widx"
 
@@ -184,13 +190,13 @@ function Stamp(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{I
     if withdata && nptrs > 1
         data = Array{ComplexF32,4}(undef, numAntennas, numPolarizations,
                                           numChannels, numTimesteps)
-        load_data!(reinterpret(Float32, data), words, pidx+1, segidxs)
+        load_data!(reinterpret(Float32, data), words, pidx+1, sidxs)
     else
         data = ComplexF32[;;;;]
     end
 
     seticoreVersion = nptrs > 2 ? load_string(words, pidx+2) : ""
-    signal = nptrs > 3 ? Signal(words, pidx+3, segidxs) : nothing
+    signal = nptrs > 3 ? Signal(words, pidx+3, sidxs) : nothing
     obsid = nptrs > 4 ? load_string(words, pidx+4) : ""
 
     Stamp(
@@ -217,11 +223,14 @@ function Stamp(words::Vector{UInt64}, widx::Int64, segidxs::Tuple{Int64,Vararg{I
     )
 end
 
-function Stamp(p::Tuple{Vector{UInt64}, Int64, Tuple{Int64,Vararg{Int64}}};
-             withdata=true)
-    words, widx, segidxs = p
-    Stamp(words, widx, segidxs; withdata)
+function Stamp(words::Vector{UInt64}, fidx::Int64; withdata=true)
+    capnp_frame(Stamp, words, fidx; withdata)
 end
+
+function Stamp(p::Tuple{Vector{UInt64}, Int64}; withdata=true)
+    Stamp(p...; withdata)
+end
+
 
 """
     Stamp(d::AbstractDict, data::Array)

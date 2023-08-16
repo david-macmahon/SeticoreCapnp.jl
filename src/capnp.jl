@@ -74,7 +74,7 @@ function load_string(words::Vector{UInt64}, widx::Int64)
 end
 
 function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
-                    segidxs::Tuple{Int64,Vararg{Int64}}) where {T}
+                    sidxs::Tuple{Int64,Vararg{Int64}}) where {T}
     # Data can be CapnpList or CapnpISP (pointing to a CapnpList)
     # If we have a CapnpISP, we dereference it and pass it, recursively, to
     # load_data!.
@@ -85,10 +85,10 @@ function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
         @assert lpsize == 0 "double landing pad not supported @$widx"
 
         # Calcualte landing pad index
-        lidx = segidxs[segid+1] + segoffset
+        lidx = sidxs[segid+1] + segoffset
         #@show lidx
 
-        return load_data!(dest, words, lidx, segidxs)
+        return load_data!(dest, words, lidx, sidxs)
     end
 
     ptype, offset, szcode, len = parseword(words[widx])
@@ -113,10 +113,54 @@ function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
     dest
 end
 
-function segment_sizes(capnp::Vector{UInt64}, widx)
-    @debug "frame @$widx"
-    numsegs = load_value(UInt32, capnp, widx, 1) + 1
-    ntuple(i->load_value(UInt32, capnp, widx, i+1), numsegs)
+"""
+    segment_sizes(words::Vector{UInt64}, fidx::Int64) -> (sizes...)
+
+Returns a tuple containing the sizes of the segments of the Capnp frame starting
+at `words[fidx]`.
+"""
+function segment_sizes(words::Vector{UInt64}, fidx::Int64)::Tuple{Int64, Vararg{Int64}}
+    numsegs = load_value(UInt32, words, fidx, 1) + 1
+    # We don't support empty frames (yet?)
+    @assert numsegs != 0 "empty frame @$fidx"
+    ntuple(i->load_value(UInt32, words, fidx, i+1), numsegs)
+end
+
+"""
+    segment_idxs(words::Vector{UInt64}, fidx) -> (sidx, ..., nextfidx)
+
+Returns a tuple containing the index of the each segment of the frame starting
+at `words[fidx]` and the index of the start of the next frame.
+"""
+function segment_idxs(words::Vector{UInt64}, fidx::Int64)::Tuple{Int64, Vararg{Int64}}
+    sizes = segment_sizes(words, fidx)
+    nw = cld(length(sizes)+1, 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
+    cumsum(Tuple(Iterators.flatten((fidx+nw, sizes))))
+end
+
+"""
+    frame_idx(sidxs::Tuple{Int64, Vararg{Int64}}) -> fidx
+
+Given a tuple of segment indices (as returned by `segment_idxs`), return the
+index of the start of the frame containing those segments.  Note that the length
+of `sidxs` should be one more than the number of segments in the frame (i.e. it
+should include the index of the start of the next frame).
+"""
+function frame_idx(sidxs::Tuple{Int64, Vararg{Int64}})::Int64
+    nw = cld(length(sidxs), 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
+    sidxs[1] - nw
+end
+
+"""
+    capnp_frame(::Type{T}, words::Vector{UInt64}, fidx; kwargs...)::T where {T}
+
+Construct a `T` from the Capnp frame starting at index `fidx` of `words`.  Any
+`kwargs` are passed on to the constructor.
+"""
+function capnp_frame(::Type{T}, words::Vector{UInt64}, fidx::Int64; kwargs...)::T where {T}
+    @debug "frame @$fidx"
+    sidxs = segment_idxs(words, fidx)
+    T(words, sidxs[1], sidxs; kwargs...)
 end
 
 # CapnpReader
@@ -149,17 +193,14 @@ end
 
 # Capnp frame iteration
 
-function Base.iterate(iter::CapnpReader, widx::Int64=1)
-    Base.isdone(iter, widx) && return nothing
+function Base.iterate(iter::CapnpReader, fidx::Int64=1)
+    Base.isdone(iter, fidx) && return nothing
 
-    sizes = segment_sizes(iter.words, widx)
-    nw = cld((length(sizes)+1)*sizeof(UInt32), sizeof(UInt64))
-    segidxs = ntuple(length(sizes)) do i
-        i == 1 ? (widx+nw) : (widx+nw+sizes[i-1])
-    end
-    nextidx = (widx + nw + sum(sizes)) % Int64
-    #@show widx nw sizes segidxs nextidx
-    (iter.words, widx+nw, segidxs), nextidx
+    sizes = segment_sizes(iter.words, fidx)
+    nw = cld(length(sizes)+1, 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
+    nextfidx = (fidx + nw + sum(sizes)) % Int64
+    #@show fidx nw sizes nextfidx
+    (iter.words, fidx), nextfidx
 end
 
 function Base.IteratorSize(::Type{CapnpReader})
@@ -171,7 +212,7 @@ function Base.IteratorEltype(::Type{CapnpReader})
 end
 
 function Base.eltype(::Type{CapnpReader})
-    Tuple{Vector{UInt64}, Int64, Tuple{Int64,Vararg{Int64}} where N}
+    Tuple{Vector{UInt64}, Int64}
 end
 
 function Base.isdone(iter::CapnpReader, widx)

@@ -128,12 +128,12 @@ parser for the same test cases as before:
 
 |  # Hits |   Time (s)  | Memory allocated | GC percentage |
 |--------:|------------:|-----------------:|--------------:|
-|      10 |    0.000210 |      147.812 KiB |        0.00 % |
-|     100 |    0.001541 |        1.441 MiB |        0.00 % |
-|    1000 |    0.018653 |       14.413 MiB |        0.00 % |
-|   10000 |    0.242674 |      144.232 MiB |       23.44 % |
-|  100000 |    2.038773 |        1.406 GiB |        7.60 % |
-| 1000000 |   16.926111 |       11.505 GiB |        6.72 % |
+|      10 |    0.000674 |      153.156 KiB |        0.00 % |
+|     100 |    0.002079 |        1.491 MiB |        0.00 % |
+|    1000 |    0.024269 |       14.922 MiB |        0.00 % |
+|   10000 |    0.284377 |      149.433 MiB |       17.32 % |
+|  100000 |    2.474949 |        1.456 GiB |        4.13 % |
+| 1000000 |   21.077265 |       11.897 GiB |        6.44 % |
 
 The native Julia Hits and Stamps parser is over two orders of magnitude faster
 than using the Python parser from Julia!
