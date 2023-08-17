@@ -97,26 +97,31 @@ can be passed to the `DataFrame` constructor from the `DataFrames.jl` package
 
 The `NamedTuple` for a `Hit` contains these keys:
 
-| Key            |  Value type     | Description                                                                  |
-|:---------------|:----------------|:-----------------------------------------------------------------------------|
-| :frequency     | Float64         | The frequency the hit starts at                                              |
-| :index         | Int32           | The frequency bin the hit starts at (relative to the coarse channel)         |
-| :driftSteps    | Int32           | How many bins the hit drifts over                                            |
-| :driftRate     | Float64         | The drift rate in Hz/s                                                       |
-| :snr           | Float32         | The signal-to-noise ratio for the hit                                        |
-| :coarseChannel | Int32           | Which coarse channel this hit is in                                          |
-| :beam          | Int32           | Which beam this hit is in (-1 for incoherent beam)                           |
-| :sourceName    | String          | Source name for the beam                                                     |
-| :fch1          | Float64         | Frequency of first channel in `data`                                         |
-| :foff          | Float64         | Channel width of `data`                                                      |
-| :tstart        | Float64         | Start time of `data`                                                         |
-| :tsamp         | Float64         | Time step of `data`                                                          |
-| :ra            | Float64         | Right ascention of beam (hours)                                              |
-| :dec           | Float64         | Declination of beam (degrees)                                                |
-| :telescopeId   | Int32           | Telescope ID number                                                          |
-| :numTimesteps  | Int32           | Number of time samples in `data`                                             |
-| :numChannels   | Int32           | Number of frequency channels in `data`                                       |
-| :startChannel  | Int32           | First channel of data corresponds to this fine channel within coarse channel |
+| Key              | Value type | Description                                                               |
+|:-----------------|:-----------|:--------------------------------------------------------------------------|
+| :frequency       | Float64    | [S] The frequency the hit starts at (MHz)                                 |
+| :index           | Int32      | [S] The frequency bin the hit starts at (relative to the coarse channel)  |
+| :driftSteps      | Int32      | [S] How many bins the hit drifts over                                     |
+| :driftRate       | Float64    | [S] The drift rate (Hz/s)                                                 |
+| :snr             | Float32    | [S] The signal-to-noise ratio for the hit                                 |
+| :coarseChannel   | Int32      | [S] Which coarse channel this hit is in                                   |
+| :beam            | Int32      | [S] Which beam this hit is in (-1 for incoherent beam)                    |
+| :power           | Float32    | [S] Total power of the hit (counts)                                       |
+| :incoherentPower | Float32    | [S] Total power of the hit in the incoherent beam (counts) or 0.0         |
+| :sourceName      | String     | [F] Source name for the beam                                              |
+| :fch1            | Float64    | [F] Frequency of first channel in `data` (MHz)                            |
+| :foff            | Float64    | [F] Channel width of `data` (MHz)                                         |
+| :tstart          | Float64    | [F] Start time of `data` (MJD)                                            |
+| :tsamp           | Float64    | [F] Time step of `data` (seconds)                                         |
+| :ra              | Float64    | [F] Right ascention of beam (hours)                                       |
+| :dec             | Float64    | [F] Declination of beam (degrees)                                         |
+| :telescopeId     | Int32      | [F] Telescope ID number                                                   |
+| :numTimesteps    | Int32      | [F] Number of time samples in `data`                                      |
+| :numChannels     | Int32      | [F] Number of frequency channels in `data`                                |
+| :startChannel    | Int32      | [F] First channel of data is from this fine channel within coarse channel |
+
+- Fields with `[S]` are from the Hit's `signal` field.
+- Fields with `[F]` are from the Hit's `filterbank` field.
 
 The `numChannels` and `numTimesteps` fields give the dimensions of the `data`
 field of the `Hit`, though the `data` field is not included in the `NamedTuple`.
@@ -125,24 +130,35 @@ field of the `Hit`, though the `data` field is not included in the `NamedTuple`.
 
 The `NamedTuple` for `Stamps` contains these keys:
 
-| Key               | Value type           | Note                                           |
-|:------------------|:---------------------|:-----------------------------------------------|
-| :seticoreVersion  | String               | Version of seticore                            |
-| :sourceName       | String               | Source name of primary pointing                |
-| :ra               | Float64              | Right ascension of primary pointing (hours)    |
-| :dec              | Float64              | Declination of primary pointing (degrees)      |
-| :fch1             | Float64              | Frequency of first channel in `data`           |
-| :foff             | Float64              | Channel width of `data`                        |
-| :tstart           | Float64              | Start time of `data`                           |
-| :tsamp            | Float64              | Time step of `data`                            |
-| :telescopeId      | Int32                | Telescope ID number                            |
-| :coarseChannel    | Int32                | Coarse channel from which `data` was extracted |
-| :fftSize          | Int32                | FFT size using to create channels in `data`    |
-| :startChannel     | Int32                | First fine channel in `data`                   |
-| :numTimesteps     | Int32                | Number of time samples in `data`               |
-| :numChannels      | Int32                | Number of frequency channels in `data`         |
-| :numPolarizations | Int32                | Number of polarizations in `data`              |
-| :numAntennas      | Int32                | Number of antennas in `data`                   |
+| Key               | Value type | Note                                                                     |
+|:------------------|:-----------|:-------------------------------------------------------------------------|
+| :seticoreVersion  | String     | Version of seticore                                                      |
+| :sourceName       | String     | Source name of primary pointing                                          |
+| :ra               | Float64    | Right ascension of primary pointing (hours)                              |
+| :dec              | Float64    | Declination of primary pointing (degrees)                                |
+| :fch1             | Float64    | Frequency of first channel in `data` (MHz)                               |
+| :foff             | Float64    | Channel width of `data` (MHz)                                            |
+| :tstart           | Float64    | Start time of `data` (MHz)                                               |
+| :tsamp            | Float64    | Time step of `data` (seconds)                                            |
+| :telescopeId      | Int32      | Telescope ID number                                                      |
+| :coarseChannel    | Int32      | Coarse channel from which `data` was extracted                           |
+| :fftSize          | Int32      | FFT size using to create channels in `data`                              |
+| :startChannel     | Int32      | First fine channel in `data`                                             |
+| :numTimesteps     | Int32      | Number of time samples in `data`                                         |
+| :numChannels      | Int32      | Number of frequency channels in `data`                                   |
+| :numPolarizations | Int32      | Number of polarizations in `data`                                        |
+| :numAntennas      | Int32      | Number of antennas in `data`                                             |
+| :frequency        | Float64    | [S] The frequency the hit starts at (MHz)                                |
+| :index            | Int32      | [S] The frequency bin the hit starts at (relative to the coarse channel) |
+| :driftSteps       | Int32      | [S] How many bins the hit drifts over                                    |
+| :driftRate        | Float64    | [S] The drift rate (Hz/s)                                                |
+| :snr              | Float32    | [S] The signal-to-noise ratio for the hit                                |
+| :coarseChannel    | Int32      | [S] Which coarse channel this hit is in                                  |
+| :beam             | Int32      | [S] Which beam this hit is in (-1 for incoherent beam)                   |
+| :power            | Float32    | [S] Total power of the hit (counts)                                      |
+| :incoherentPower  | Float32    | [S] Total power of the hit in the incoherent beam (counts) or 0.0        |
+
+- Fields with `[S]` are from the Hit's `signal` field.
 
 The `numAntennas`, `numPolarizations`, `numChannels`, and `numTimesteps` fields
 give the dimensions of the `data` array of the `Stamp`, though the `data` field
