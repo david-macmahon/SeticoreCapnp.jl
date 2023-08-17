@@ -20,35 +20,84 @@ import Pkg
 Pkg.add(url="https://github.com/david-macmahon/SeticoreCapnp.jl")
 ```
 
-Once it is installed, you can use it like this:
+## Basic usage
+
+`SeticoreCapnp` uses a `CapnpReader` object to read Hits or Stamps files created
+by `seticore`.  Hits and stamps are represented as instances of the `Hit` and
+`Stamp` types provided `SeticoreCapnp`.  The easiest way to read a Hits or
+Stamps file is to pass the relevant type and filename to the `CapnpReader`
+constructor.  For example, to create a `CapnpReader` that can be used to read
+Hits from a file named `mydatafile.hits`:
 
 ```julia
 using SeticoreCapnp
 
-hits = SeticoreCapnp.load_hits("mydatafile.hits")
-stamps = SeticoreCapnp.load_stamps("mydatafile.hits")
+reader = CapnpReader(Hit, "mydatafile.hits")
 ```
 
-The `load_hits` and `load_stamps` functions both return a Vector of
-`OrderedDict{Symbol,Any}` objects containing hit or stamp metadata from the
-specified file as well as a Vector of Arrays containing the *Filterbank* data or
-*RAW voltage* data associated with each hit or stamp.
+With our `CapnpReader` we can now create Hits.  We could call the `Hit`
+constructor ourselves, but it is generally easier and more efficient to iterate
+through our `CapnpReader`.  Calling the `Hit` (or `Stamp`) constructor directly
+is most useful when you want a specific one and you know its "frame index" (or
+the closely related "byte offset").  Here is a simple `for` loop that will read
+all the Hits of the file associated with `reader`:
 
-By default, the `find_hits` function will only return unique hits, even if the
-file contain duplicate hits.  This is to work around a bug in some versions of
-`seticore` that output duplicate hits.  If the file is known to be
-duplicate-free or if you want the duplicates, pass `unique=false` to
-`find_hits`.
+```julia
+# Loop through all Hits in the file
+for hit in reader
+    # Do something with `hit`, which is an instance of `Hit`
+end
+```
 
-The metadata will also contain a `:fileoffset` key that can be used with the
-singular name functions `load_hit` or `load_stamp` to (re-)load just that
-individual hit or stamp from the input file.
+### Julia iterator tricks
 
-## Hits
+Because `CapnpReader` acts like a Julia iterator, if can be used with standard
+Julia iterator related functions.  For example, to create a `Vector` (i.e. list)
+of (up to) the first `N` Hits, one can use the `collect` the `first` functions:
 
-The `OrderedDict` for a hit contains these keys:
+```
+hits = collect(first(reader, N))
+```
 
-| Key            |  Value type     | Note                                                                         |
+Similarly, to get only the `N`th Hit, one can use `first` in combination with
+`Iterators.drop`:
+
+```
+hit_N = Hit(first(Iterators.drop(hits_reader, N-1)))
+```
+
+These same techniques are equally applicable when working with Stamps files.
+
+The `Hit` structs obtained from a `CapnpReader` contain fields that are
+themselves structs.  The `hit.filterbank.data` field is a `Matrix{Float32}` that
+contains a small spectrogram of the hit.  There are many more fields that make
+up a hit.
+
+### Flattening Hits and Stamps
+
+Sometimes it is convenient to represent a collection of Hits or Stamps as a
+table or `DataFrame`.  To facilitate this, a `Hit` or `Stamp` instance can be
+flattened to a `NamedTuple` by passing it to the `NamedTuple` constructor.  When
+flattening a `Hit` or `Stamp` to a `NamedTuple`, only one copy of redundant
+fields is retained and the `data` field is omitted.  The `NamedTuple`
+constructor can also be *broadcast* over an iterator, such as our reader object,
+to produce a `Vector` (i.e. list) of the iterator's Hits or Stamps.
+
+```julia
+# Get a list of NamedTuples for (up to) the first 5 Hits.
+# Note the `.` that turns this into a *broadcast*.
+nts = NamedTuple.(first(reader, 5))
+```
+
+In the above example, `nts` will be a `Vector{NamedTuple}`, which means that it
+can be passed to the `DataFrame` constructor from the `DataFrames.jl` package
+(or used with any other Julia package that supports the `Tables.jl` interface).
+
+#### Hits
+
+The `NamedTuple` for a `Hit` contains these keys:
+
+| Key            |  Value type     | Description                                                                  |
 |:---------------|:----------------|:-----------------------------------------------------------------------------|
 | :frequency     | Float64         | The frequency the hit starts at                                              |
 | :index         | Int32           | The frequency bin the hit starts at (relative to the coarse channel)         |
@@ -68,14 +117,13 @@ The `OrderedDict` for a hit contains these keys:
 | :numTimesteps  | Int32           | Number of time samples in `data`                                             |
 | :numChannels   | Int32           | Number of frequency channels in `data`                                       |
 | :startChannel  | Int32           | First channel of data corresponds to this fine channel within coarse channel |
-| :fileoffset    | Int64           | Offset from which this hit can be loaded                                     |
 
-The data for each hit is a `Matrix{Float32}` sized as `(numChannels,
-numTimesteps)`.
+The `numChannels` and `numTimesteps` fields give the dimensions of the `data`
+field of the `Hit`, though the `data` field is not included in the `NamedTuple`.
 
-## Stamps
+#### Stamps
 
-The `OrderedDict` for stamps contains these keys:
+The `NamedTuple` for `Stamps` contains these keys:
 
 | Key               | Value type           | Note                                           |
 |:------------------|:---------------------|:-----------------------------------------------|
@@ -95,97 +143,42 @@ The `OrderedDict` for stamps contains these keys:
 | :numChannels      | Int32                | Number of frequency channels in `data`         |
 | :numPolarizations | Int32                | Number of polarizations in `data`              |
 | :numAntennas      | Int32                | Number of antennas in `data`                   |
-| :fileoffset       | Int64                | Offset from which this stamp can be loaded     |
 
-The data for each stamp is an `Array{ComplexF32, 4}` sized as `(numAntennas,
+The `numAntennas`, `numPolarizations`, `numChannels`, and `numTimesteps` fields
+give the dimensions of the `data` array of the `Stamp`, though the `data` field
+is not included in the `NamedTuple`.
+
+### Extracting the `data`
+
+Sometimes you just want to get at the data, specifically the
+`filterbank.data` field of Hits or the `data` field of Stamps.  Here are a few
+of the many ways that this can be done:
+
+```julia
+# Using the `map` function
+datas = map(h->h.filterbank.data, reader)
+
+# Using a list comprehension
+datas = [h.filterbank.data for h in reader]
+
+# Using `push!` and a `for` loop
+datas = Matrix{Float32}[]
+for h in reader
+    push!(datas, h.filterbank.data)
+end
+```
+
+The variable `datas` is double pluralized to remind us that in each example it
+is a list of data arrays.  For Hits, each data array is a `Matrix{Float32}`, so
+`datas` will be a `Vector{Matrix{Float32}}`.  For Stamps, each data array is an
+`Array{Complex{Float32},4}`, so `datas` will be a
+`Vector{Array{Complex{Float32}}}`.
+
+The `data` for each `Hit` is a `Matrix{Float32}` sized as `(numChannels,
+numTimesteps)`.
+
+The `data` for each `Stamp` is an `Array{ComplexF32, 4}` sized as `(numAntennas,
 numPolarizations, numChannels, numTimesteps)`.
-
-## Native Julia interface
-
-Being able to call the Python `capnp` package to read the Hits and Stamps
-files leverages existing code and streamlines development time.  While the
-translation between Julia and Python is easy and almost seamless, the overall
-performance is unfortunately not good, which limits the scalability of this
-approach.  For example, reading 1 million hits from a single Hits file took over
-45 minutes!  Here is a table showing some timing and memory stats for reading
-various numbers of hits from a single Hits file ranging from 10 hits to 1
-million hits:
-
-|  # Hits |   Time (s)  | Memory allocated | GC percentage |
-|--------:|------------:|-----------------:|--------------:|
-|      10 |    0.021294 |        4.678 MiB |        0.00 % |
-|     100 |    0.256432 |       46.906 MiB |        6.91 % |
-|    1000 |    2.492556 |      469.119 MiB |       10.58 % |
-|   10000 |   24.844329 |        4.591 GiB |       10.29 % |
-|  100000 |  269.365632 |       45.725 GiB |       15.51 % |
-| 1000000 | 2783.571640 |      378.214 GiB |       26.36 % |
-
-To speed things up, a rudamentary generic Capnp parser was written natively in
-Julia and functions to parse Hits and Stamps using their current schemas were
-hand coded (as opposed to being auto-generated from the `hit.capnp` and
-`stamp.capnp` files).  Here are the timing and memory stats for the native Julia
-parser for the same test cases as before:
-
-|  # Hits |   Time (s)  | Memory allocated | GC percentage |
-|--------:|------------:|-----------------:|--------------:|
-|      10 |    0.000674 |      153.156 KiB |        0.00 % |
-|     100 |    0.002079 |        1.491 MiB |        0.00 % |
-|    1000 |    0.024269 |       14.922 MiB |        0.00 % |
-|   10000 |    0.284377 |      149.433 MiB |       17.32 % |
-|  100000 |    2.474949 |        1.456 GiB |        4.13 % |
-| 1000000 |   21.077265 |       11.897 GiB |        6.44 % |
-
-The native Julia Hits and Stamps parser is over two orders of magnitude faster
-than using the Python parser from Julia!
-
-To use the native Julia parser, create a `CapnpReader` object by passing a Hits
-or Stamps filename to the constructor:
-
-```julia
-using SeticoreCapnp
-
-hits_reader = CapnpReader("your_datafile.hits")
-```
-
-The `CapnpReader` object acts as a Julia iterator that provides information on
-each iteration that can be used to construct Hit or Stamp object, as appropraite
-for the data file being parsed.  This can be done by using any Julia function
-that works with iterators.  For example, the `map` function can be used to
-create a Vector of Hit objects:
-
-```julia
-# hits will be a Vector of Hit objects (aka Vector{Hit})
-hits = map(SeticoreCapnp.Hit, hits_reader)
-```
-
-### Omitting data
-
-By default, the `data` field of a Hit's Filterbank object or a Stamp is
-populated with the relevant data from the Hits or Stamps file.  If the data
-field is not immediately relevant, it is possible to omit populating it by
-passing `withdata=false` as a keyword argument to the Hit or Stamp constructor
-methods that accept `CapnpReader` parameters.  When `withdata=false` is passed
-the `data` field will still be an Array of the appropriate type, but it will be
-zero sized in all dimensions.
-
-### Julia iterator tricks
-
-Because `CapnpReader` acts like a Julia iterator, if can be used with standard
-Julia iterator related functions.  For example, to load only the first `N` Hits,
-one can use the `first` function:
-
-```
-first_N_hits = map(Hit, first(hits_reader, N))
-```
-
-Similarly, to get only the `N`th Hit, one can use `first` in combination with
-`Iterators.drop`:
-
-```
-hit_N = Hit(first(Iterators.drop(hits_reader, N-1)))
-```
-
-These same techniques are equally applicable when working with Stamps files.
 
 ### Finalizing CapnpReader objects
 
@@ -194,16 +187,116 @@ creates an Array whose data get automatically paged into memory (i.e. read from
 disk) as they are accessed.  The process must therefore hold open the underlying
 file.  When the Array eventually gets finalized, the memory is "munmap"ed, which
 closes the file.  For more control over when the file gets closed, it is
-possible to `finalize` the `CapnpReader` object directly which will call
-`finalize` on the data Array.
+possible to `finalize` the `CapnpReader` object directly, which will call
+`finalize` on the data Array, which will close the file.
 
 NB: Using the `CapnpReader` object after calling finalize on it is an error and
 the process will segfault (i.e. crash)!
 
-### Status of the native Julia interface
+## Advanced usage
 
-Currently the native Julia interface exists as a separate "alternate" way to
-parse Hits and Stamps files.  The "standard" `load_hits` and `load_stamps`
-functions currently use the Python-based technique for loading Hits and Stamps.
-These functions will be changed to use the native Julia interface in a future
-version given the performance benefits that the native Julia interface offers.
+The `CapnpReader` has another constructor that allows for very flexible
+iteration through a Capnp file:
+
+```julia
+CapnpReader(f::Function ::Type{T}, fname::AbstractString)
+```
+
+This is the most generic `CapnpReader` constructor.  Iterating over
+the returned object will call `f(T, t::Tuple{Vector{UInt64}, Int64})`
+for each object in the Capnp file and return the result.  In this context, `f`
+is a factory function that will load on object of type `T` from the file
+(actually the `Vector` and `Int64` of the tuple) and then return the object or
+some variation of it (e.g. the object and the file offset from which it was
+read).  Factory methods can use any constructor method of type `T`, such as to
+pass keyword arguments.  A number of useful factory methods are defined in the
+`SeticoreCapnp` module.
+
+### Omitting data
+
+By default, the `data` field of a Hit's Filterbank object or a Stamp is
+populated with the relevant data from the Hits or Stamps file.  If the data
+field is not immediately relevant, it is possible to omit populating it by
+passing `withdata=false` as a keyword argument to the Hit or Stamp constructor.
+When `withdata=false` is passed the `data` field will still be an Array of the
+appropriate type, but it will be zero sized in all dimensions.  Not reading the
+data for the `data` array speeds up the loading of the Hits or Stamps, which can
+save on memory pressure and improve throughput in cases where the data are not
+immediately relevant.
+
+To create a `CapnpReader` object that will return `Stamp` instances with the
+`data` field NOT populated, pass the `SeticoreCapnp.nodata_factory` function to
+the `CapnpReader` constructor:
+
+```julia
+using SeticoreCapnp
+
+nodata_reader = CapnpReader(SeticoreCapnp.nodata_factory, Stamp, "somefile.stamps")
+```
+
+Every `Stamp` obtained by iterating `nodata_reader` will have a `data` field
+that is an empty 4-dimensional `Array`.  The same technique can be used with
+`Hit` as well, where the resulting `Hit` instances will have an empty `Matrix`
+(i.e. an empty 2-dimensional `Array`).
+
+### More details
+
+The CapnpReader type is now parameterized with a type parameter `T` and
+a factory function parameter `F`: `CapnpReader{T,F}`. The type parameter
+indicates the type of object that will be constructed from the Capnp
+file on each iteration and the factory function will be used to perform
+the construction.  The factory function need not return (just) an
+instance of the type, but that is the most basic/common case.  Several
+factory functions are provided, but the user can define their own
+factory functions if desired.  A factory function must have a method
+with a signature that matches this:
+
+```julia
+my_factory_function(::Type{T}, t::Tuple{Vector{UInt64}, Int64})
+```
+
+The `T` type may be an explicit type or a parameterized type.  If the
+return type of the factory function is known, the user may provide a
+method for `Base.IteratorEltype` that takes a
+`::Type{CapnpReader{T,my_factory_function}}` type and returns
+`Base.Eltype()` as well as a `Base.eltype` method that returns the type
+returned by the factory function.  See the existing factory code in
+`src/capnp.jl`.
+
+The following factory methods are provided:
+
+- `default_factory(::Type{Tuple}, t:Tuple{Vector{UInt64}, Int64})`
+
+  Low level factory that simply returns `t`.
+
+- `default_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
+
+  Default factory that returns `T(t)`.
+
+- `nodata_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
+
+  Like `default_factory` but passes `withdata=false` to omit data.  The
+  `withdata` keyword is supported by the `Filterbank`, `Hit` and `Stamp`
+  constructors.  Returns an instance of `T`.
+
+- `offset_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
+
+  Like `nodata_factory` but returns a `Tuple{T,Int64}` where the `Int64`
+  is the zero based byte offset of the start of the frame from which the
+  object was read.
+
+- `index_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
+
+  Like `offset_factory` but the `Int64` is the one based word (`UInt64`)
+  offset of the start of the frame from which the object was read.
+
+### More on flattening with offset/index factory functions
+
+When using `offset_factory` or `index_factory`, the type returned by iterating
+is a `Tuple{T, Int64}`, where `T` is typically `Hit` or `Stamp`.  `NamedTuple`
+constructors are provided for this Tuple types `Tuple{Hit,Int64}` and
+`Tuple{Stamp,Int64}`.  These constructors are the same as the `NamedTuple`
+constructors provided for `Hit` and `Stamp` objects, but the constructor for
+these `Tuple` types include a final field containing the Int64 value from the
+`Tuple`.  The name of this extra field defaults to `:file_offswt`, but this can
+be overridden by passing a `Symbol` as the second paramweter of the constructor.
