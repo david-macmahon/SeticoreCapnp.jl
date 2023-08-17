@@ -192,6 +192,10 @@ function Stamp(t::Tuple{Vector{UInt64}, Int64}; withdata=true)
     Stamp(t...; withdata)
 end
 
+function Stamp(reader::CapnpReader, fidx::Int64; withdata=true)
+    Stamp(reader.words, fidx; withdata)
+end
+
 function getdata(s::Stamp)
     s.data
 end

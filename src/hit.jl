@@ -306,6 +306,10 @@ function Hit(t::Tuple{Vector{UInt64}, Int64}; withdata=true)
     Hit(t...; withdata)
 end
 
+function Hit(reader::CapnpReader, fidx::Int64; withdata=true)
+    Hit(reader.words, fidx; withdata)
+end
+
 function getdata(h::Hit)
     getdata(h.filterbank)
 end
