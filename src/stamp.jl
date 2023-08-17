@@ -96,45 +96,6 @@ struct Stamp
 end
 
 """
-    Stamp(s)
-Construct a `Stamp` from capnp object `s`.
-"""
-function Stamp(s)
-    ntime = convert(Int32, s.numTimesteps)
-    nchan = convert(Int32, s.numChannels)
-    npol  = convert(Int32, s.numPolarizations)
-    nant  = convert(Int32, s.numAntennas)
-    datavec = convert(Vector{Float32}, s.data)
-    datavecz = reinterpret(Complex{Float32}, datavec)
-    # Added type assertions to make JET happy
-    data = reshape(datavecz, Int64(nant)::Int64, Int64(npol)::Int64,
-                             Int64(nchan)::Int64, Int64(ntime)::Int64)
-
-    Stamp(
-        convert(String,  s.seticoreVersion),
-        convert(String,  s.sourceName),
-        convert(Float64, s.ra),
-        convert(Float64, s.dec),
-        convert(Float64, s.fch1),
-        convert(Float64, s.foff),
-        convert(Float64, s.tstart),
-        convert(Float64, s.tsamp),
-        convert(Int32,   s.telescopeId),
-        convert(Int32,   s.coarseChannel),
-        convert(Int32,   s.fftSize),
-        convert(Int32,   s.startChannel),
-        Signal(s.signal),
-        convert(Int32,   s.schan),
-        convert(String,  s.obsid),
-        ntime,
-        nchan,
-        npol,
-        nant,
-        data
-    )
-end
-
-"""
     Stamp((words, fidx::Int64); withdata=true)
     Stamp(words, fidx::Int64; withdata=true)
     Stamp(words, widx::Int64, sidxs::Tuple{Int64,...}; withdata=true)
@@ -231,44 +192,14 @@ function Stamp(t::Tuple{Vector{UInt64}, Int64}; withdata=true)
     Stamp(t...; withdata)
 end
 
-
-"""
-    Stamp(d::AbstractDict, data::Array)
-
-Construct a `Stamp` from `AbstractDict` object `d`, whose key type must be
-`Symbol` or an `AbstractString`, and `data`.
-"""
-function Stamp(d::AbstractDict{T,Any}, data::Array{Float32}) where T<:Union{AbstractString,Symbol}
-    Stamp(
-        # Maybe these converts are not needed?
-        convert(String,  d[T(:seticoreVersion)]),
-        convert(String,  d[T(:sourceName)]),
-        convert(Float64, d[T(:ra)]),
-        convert(Float64, d[T(:dec)]),
-        convert(Float64, d[T(:fch1)]),
-        convert(Float64, d[T(:foff)]),
-        convert(Float64, d[T(:tstart)]),
-        convert(Float64, d[T(:tsamp)]),
-        convert(Int32,   d[T(:telescopeId)]),
-        convert(Int32,   d[T(:coarseChannel)]),
-        convert(Int32,   d[T(:fftSize)]),
-        convert(Int32,   d[T(:startChannel)]),
-        Signal(d),
-        convert(Int32,   d[T(:schan)]),
-        convert(String,  d[T(:obsid)]),
-        convert(Int32,   d[T(:numTimesteps)]),
-        convert(Int32,   d[T(:numChannels)]),
-        convert(Int32,   d[T(:numPolarizations)]),
-        convert(Int32,   d[T(:numAntennas)]),
-        data
-    )
-end
-
 function getdata(s::Stamp)
     s.data
 end
 
-const StampDictFields = (
+"""
+Stamp fields to use when flattening a Stamp to a NamedTuple.
+"""
+const StampFlatFields = (
     :seticoreVersion,
     :sourceName,
     :ra,
@@ -291,8 +222,8 @@ const StampDictFields = (
 
 function Core.NamedTuple(s::Stamp)
     NamedTuple(Iterators.flatten((
-        (k=>getfield(s,        k) for k in StampDictFields),
-        (k=>getfield(s.signal, k) for k in SignalDictFields)
+        (k=>getfield(s,        k) for k in StampFlatFields),
+        (k=>getfield(s.signal, k) for k in SignalFlatFields)
     )))
 end
 
@@ -300,86 +231,8 @@ end
 function Core.NamedTuple(t::Tuple{Stamp,Int64}, key=:fileoffset)
     s, v = t
     NamedTuple(Iterators.flatten((
-        (k=>getfield(s,        k) for k in StampDictFields),
-        (k=>getfield(s.signal, k) for k in SignalDictFields),
+        (k=>getfield(s,        k) for k in StampFlatFields),
+        (k=>getfield(s.signal, k) for k in SignalFlatFields),
         (key=>v,)
     )))
-end
-
-function OrderedCollections.OrderedDict{Symbol,Any}(s::Stamp)
-    d = OrderedDict{Symbol,Any}(
-        StampDictFields .=> getfield.(Ref(s), StampDictFields)
-    )
-    merge!(d, OrderedDict(s.signal))
-end
-
-function OrderedCollections.OrderedDict(s::Stamp)
-    OrderedCollections.OrderedDict{Symbol,Any}(s)
-end
-
-"""
-    load_stamp(filename, offset; kwargs...) -> OrderedDict, Array{ComplexF32,4}, Int64
-    load_stamp(io::IO[, offset]; kwargs...) -> OrderedDict, Array{ComplexF32,4}, Int64
-
-Load a single `Stamp` from the given `offset` (or current position) within
-`filename` or `io` and return the metadata fields as an
-`OrderedDict{Symbol,Any}`, the complex voltage data of the stamp as an
-`Array{ComplexF32,4}`, and the offset from which the stanp was loaded.
-
-The only supported `kwargs` is `traversal_limit_in_words` which sets the
-maximmum size of a stamp.  It default it 2^30 words.
-"""
-function load_stamp(io::IO; traversal_limit_in_words=2^30)
-    offset = lseek(io)
-    stamp = Stamp(SeticoreCapnp.CapnpStamp[].Stamp.read(io; traversal_limit_in_words))
-    data = getdata(stamp)
-
-    meta = OrderedDict(stamp)
-    # Merge the Signal fields as additional columns, omitting redundant
-    # `coarseChannel` field (and already omitted `numTimesteps` field).
-    sig = OrderedDict(stamp.signal)
-    delete!(sig, :coarseChannel)
-    merge!(meta, sig)
-
-    meta, data, offset
-end
-
-function load_stamp(io::IO, offset; traversal_limit_in_words=2^30)
-    seek(io, offset)
-    load_stamp(io; traversal_limit_in_words)
-end
-
-function load_stamp(stamps_filename, offset; traversal_limit_in_words=2^30)
-    open(stamps_filename) do io
-        load_stamp(io, offset; traversal_limit_in_words)
-    end
-end
-
-include("stampsfile.jl")
-
-"""
-    load_stamps(filename; kwargs...) -> Vector{OrderedDict}, Vector{Array{Float32,4}}
-
-Load the `Stamp`s from the given `filename` and return the metadata fields as a
-`Vector{OrderedDict{Symbol,Any}}` and the voltage data as a
-`Vector{Array{ComplexF32,4}}` whose elements correspond one-to-one with the
-entries of the metadata `Vector`.  The metadata entries includes a `:fileoffset`
-entry whose value is the offset of the `Stamp` within the input file. This
-offset can be used with `load_stamp` if desired.
-
-The only supported `kwargs` is `traversal_limit_in_words` which sets the
-maximmum size of a stamp.  It default it 2^30 words.
-"""
-function load_stamps(stamps_filename; traversal_limit_in_words=2^30)
-    meta = OrderedDict{Symbol,Any}[]
-    data = Array{ComplexF32,4}[]
-    open(stamps_filename) do io
-        for (m,d,o) in StampsFile(io, traversal_limit_in_words)
-            m[:fileoffset] = o
-            push!(meta, m)
-            push!(data, d)
-        end
-    end
-
-    meta, data
 end

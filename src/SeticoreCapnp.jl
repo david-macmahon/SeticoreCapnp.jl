@@ -1,17 +1,12 @@
 module SeticoreCapnp
 
-export load_hits, load_hit
-export save_hits
-export load_stamps, load_stamp
 export CapnpReader, Hit, Stamp
+export save_hits
 
 using Mmap
 using PyCall
-using OrderedCollections
 
 include("capnp.jl")
-include("lseek.jl")
-using .Lseek: lseek
 
 const CapnpHit = Ref{PyObject}()
 const CapnpStamp = Ref{PyObject}()
