@@ -331,10 +331,13 @@ function Core.NamedTuple(t::Tuple{Hit,Int64}, key=:fileoffset)
     )))
 end
 
-function save_hit(io, hit::AbstractDict, data::Matrix{Float32})
+function save_hit(io, hit::Hit)
+    data = hit.filterbank.data
+    @assert length(data) > 0 "cannot save Hit with no data"
+
     capnp = SeticoreCapnp.CapnpHit[]
-    s = capnp.Signal(; filter(kv->first(kv) in fieldnames(Signal), hit)...)
-    f = capnp.Filterbank(; filter(kv->first(kv) in fieldnames(Filterbank), hit)...)
+    s = capnp.Signal(; (k=>getfield(hit.signal, k) for k in fieldnames(Signal))...)
+    f = capnp.Filterbank(; (k=>getfield(hit.filterbank, k) for k in fieldnames(Filterbank) if k != :data)...)
     dlist = f.init(:data, length(data))
     for i in eachindex(data)
         dlist[i] = data[i]
@@ -343,10 +346,10 @@ function save_hit(io, hit::AbstractDict, data::Matrix{Float32})
     capnphit.write(io)
 end
 
-function save_hits(hits_filename, hits::Vector{<:AbstractDict}, data::Vector{Matrix{Float32}})
+function save_hits(hits_filename, hits::Vector{Hit})
     open(hits_filename, "w+") do io
-        for (h, d) in zip(hits, data)
-            save_hit(io, h, d)
+        for h in hits
+            save_hit(io, h)
         end
     end
 end
