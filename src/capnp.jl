@@ -219,7 +219,13 @@ function CapnpReader(words::Vector{UInt64})
     CapnpReader(Tuple, words)
 end
 
-function CapnpReader(factory::Function, ::Type{T}, src::Union{IO,AbstractString}) where T
+function CapnpReader(factory::Function, ::Type{T}, src::IO) where T
+    CapnpReader{T,factory}(mmap(src, Vector{UInt64}; shared=false))
+end
+
+function CapnpReader(factory::Function, ::Type{T}, src::AbstractString) where T
+    ispath(src) || error("$src does not exist")
+    isfile(src) || error("$src is not a file")
     CapnpReader{T,factory}(mmap(src, Vector{UInt64}; shared=false))
 end
 
@@ -228,7 +234,7 @@ function CapnpReader(::Type{T}, src::Union{IO,AbstractString}) where T
 end
 
 function CapnpReader(src::Union{AbstractString,IO})
-    CapnpReader(mmap(src, Vector{UInt64}; shared=false))
+    CapnpReader(Tuple, src)
 end
 
 """
