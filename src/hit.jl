@@ -112,24 +112,6 @@ function Signal(words::Vector{UInt64}, widx::Int64, _::Tuple{Int64,Vararg{Int64}
 end
 
 """
-Signal fields to use when flattening a Signal to a NamedTuple.  Omit redundant
-numTimesteps field from Signal rather than Filterbank because it was added to
-Signal after it was part of Filterbank so some hits files will not have
-Signal.numTimesteps.
-"""
-const SignalFlatFields = (
-    :frequency,
-    :index,
-    :driftSteps,
-    :driftRate,
-    :snr,
-    :coarseChannel,
-    :beam,
-    :power,
-    :incoherentPower
-)
-
-"""
 The `Filterbank` struct contains a smaller slice of the larger filterbank that
 we originally found this hit in.
 """
@@ -233,24 +215,6 @@ function getdata(::Nothing)
 end
 
 """
-Filterbank fields to use when flattening a Filterbank to a NamedTuple.  Omits
-data and redundant coarseChannel and beam fields.
-"""
-const FilterbankFlatFields = (
-    :sourceName,
-    :fch1,
-    :foff,
-    :tstart,
-    :tsamp,
-    :ra,
-    :dec,
-    :telescopeId,
-    :numTimesteps,
-    :numChannels,
-    :startChannel,
-)
-
-"""
 A hit without a signal indicates that we looked for a hit here and didn't find one.
 A hit without a filterbank indicates that to save space we didn't store any filterbank
 data in this file; it should be available elsewhere.
@@ -314,22 +278,7 @@ function getdata(h::Hit)
     getdata(h.filterbank)
 end
 
-function Core.NamedTuple(h::Hit)
-    NamedTuple(Iterators.flatten((
-        (k=>getfield(h.signal,     k) for k in SignalFlatFields),
-        (k=>getfield(h.filterbank, k) for k in FilterbankFlatFields)
-    )))
-end
-
-# For offset_factory/index_factory output
-function Core.NamedTuple(t::Tuple{Hit,Int64}, key=:fileoffset)
-    h, v = t
-    NamedTuple(Iterators.flatten((
-        (k=>getfield(h.signal,     k) for k in SignalFlatFields),
-        (k=>getfield(h.filterbank, k) for k in FilterbankFlatFields),
-        (key=>v,)
-    )))
-end
+include("hitnt.jl")
 
 function save_hit(io, hit::Hit)
     data = hit.filterbank.data

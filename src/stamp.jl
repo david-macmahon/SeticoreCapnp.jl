@@ -200,43 +200,4 @@ function getdata(s::Stamp)
     s.data
 end
 
-"""
-Stamp fields to use when flattening a Stamp to a NamedTuple.
-"""
-const StampFlatFields = (
-    :seticoreVersion,
-    :sourceName,
-    :ra,
-    :dec,
-    :fch1,
-    :foff,
-    :tstart,
-    :tsamp,
-    :telescopeId,
-    :coarseChannel,
-    :fftSize,
-    :startChannel,
-    :schan,
-    :obsid,
-    :numTimesteps,
-    :numChannels,
-    :numPolarizations,
-    :numAntennas
-)
-
-function Core.NamedTuple(s::Stamp)
-    NamedTuple(Iterators.flatten((
-        (k=>getfield(s,        k) for k in StampFlatFields),
-        (k=>getfield(s.signal, k) for k in SignalFlatFields)
-    )))
-end
-
-# For offset_factory/index_factory output
-function Core.NamedTuple(t::Tuple{Stamp,Int64}, key=:fileoffset)
-    s, v = t
-    NamedTuple(Iterators.flatten((
-        (k=>getfield(s,        k) for k in StampFlatFields),
-        (k=>getfield(s.signal, k) for k in SignalFlatFields),
-        (key=>v,)
-    )))
-end
+include("stampnt.jl")

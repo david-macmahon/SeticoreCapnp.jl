@@ -153,12 +153,12 @@ The `NamedTuple` for `Stamps` contains these keys:
 | :driftSteps       | Int32      | [S] How many bins the hit drifts over                                    |
 | :driftRate        | Float64    | [S] The drift rate (Hz/s)                                                |
 | :snr              | Float32    | [S] The signal-to-noise ratio for the hit                                |
-| :coarseChannel    | Int32      | [S] Which coarse channel this hit is in                                  |
 | :beam             | Int32      | [S] Which beam this hit is in (-1 for incoherent beam)                   |
 | :power            | Float32    | [S] Total power of the hit (counts)                                      |
 | :incoherentPower  | Float32    | [S] Total power of the hit in the incoherent beam (counts) or 0.0        |
 
-- Fields with `[S]` are from the Hit's `signal` field.
+- Fields with `[S]` are from the `signal` field of the highest SNR `Hit`
+  associated with this `Stamp`.
 
 The `numAntennas`, `numPolarizations`, `numChannels`, and `numTimesteps` fields
 give the dimensions of the `data` array of the `Stamp`, though the `data` field
