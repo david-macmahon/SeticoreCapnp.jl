@@ -10,35 +10,35 @@ sizecode(::Type{T} where {T<:Union{Int16,UInt16,Float16}})::Int8 = 3
 sizecode(::Type{T} where {T<:Union{Int32,UInt32,Float32}})::Int8 = 4
 sizecode(::Type{T} where {T<:Union{Int64,UInt64,Float64}})::Int8 = 5
 
-function parseword(w::UInt64)
-    parseword(w, Val(CapnpPtrEnum(w&3)))
-end
-
-function parseword(w::UInt64, ::Val{CapnpStruct})
-    b = ((w & 0xffff_fffc) >> 2) % Int32
+function parseword_struct(w::UInt64)
+    @assert w&3 == Int(CapnpStruct) "parseword_struct: $w is not a struct"
+    b = ((w & 0xffff_fffc) % Int32) >> 2
     c = (w >> 32) % UInt16
     d = (w >> 48) % UInt16
-    CapnpStruct, b, c, d
+    b, c, d
 end
 
-function parseword(w::UInt64, ::Val{CapnpList})
+function parseword_list(w::UInt64)
+    @assert w&3 == Int(CapnpList) "parseword_list: $w is not a list"
     b = ((w & 0xffff_fffc) % Int32) >> 2
     c = ((w >> 32) & 7) % Int8
     d = (w >> 35) % UInt32
-    CapnpList, b, c, d
+    b, c, d
 end
 
-function parseword(w::UInt64, ::Val{CapnpISP})
+function parseword_isp(w::UInt64)
+    @assert w&3 == Int(CapnpISP) "parseword_list: $w is not an ISP"
     b = ((w >> 2) & 1) % Int8
     c = ((w & 0xffff_fff8) >> 3) % UInt32
     d = (w >> 32) % UInt32
-    CapnpISP, b, c, d
+    b, c, d
 end
 
-function parseword(w::UInt64, ::Val{CapnpCapability})
+function parseword_cap(w::UInt64)
+    @assert w&3 == Int(CapnpCapability) "parseword_list: $w is not a capability"
     b = ((w & 0xffff_fffc) % Int32) >> 2
     c = (w >> 32) % Int32
-    CapnpCapability, b, c, 0x00
+    b, c, 0x00
 end
 
 function load_value(::Type{T}, words::Vector{UInt64}, widx::Int64, tidx::Int64)::T where {
@@ -54,11 +54,9 @@ function load_value(::Type{T}, words::Vector{UInt64}, widx::Int64, tidx::Int64):
 end
 
 function load_string(words::Vector{UInt64}, widx::Int64)
-    ptype, offset, szcode, len = parseword(words[widx])
-
     # A capnp String (Text) is a CapnpList with szcode 2 (i.e. 1 byte
     # elements)
-    @assert ptype == CapnpList "ptype $ptype @$widx"
+    offset, szcode, len = parseword_list(words[widx])
     @assert szcode == sizecode(UInt8) "szcode $szcode != $(sizecode(UInt8)) @$widx"
 
     # Data index
@@ -73,13 +71,13 @@ function load_string(words::Vector{UInt64}, widx::Int64)
     GC.@preserve words unsafe_string(p, len-1)
 end
 
-function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
-                    sidxs::Tuple{Int64,Vararg{Int64}}) where {T}
+function load_data!(dest::AbstractArray{T,N}, words::Vector{UInt64}, widx::Int64,
+                    sidxs::Vararg{Int64,S}) where {T,N,S}
     # Data can be CapnpList or CapnpISP (pointing to a CapnpList)
     # If we have a CapnpISP, we dereference it and pass it, recursively, to
     # load_data!.
     if CapnpPtrEnum(words[widx]&3) == CapnpISP
-        _, lpsize, segoffset, segid = parseword(words[widx])
+        lpsize, segoffset, segid = parseword_isp(words[widx])
 
         # For now we don't support "double landing pad"
         @assert lpsize == 0 "double landing pad not supported @$widx"
@@ -88,13 +86,11 @@ function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
         lidx = sidxs[segid+1] + segoffset
         #@show lidx
 
-        return load_data!(dest, words, lidx, sidxs)
+        return load_data!(dest, words, lidx, sidxs...)
     end
 
-    ptype, offset, szcode, len = parseword(words[widx])
-
     # Data is a capnp List
-    @assert ptype == CapnpList "ptype $ptype @$widx"
+    offset, szcode, len = parseword_list(words[widx])
     @assert szcode == sizecode(T) "szcode $szcode != $(sizecode(T)) @$widx"
     @assert len == length(dest) "len $len != $(length(dest)) @$widx"
 
@@ -114,12 +110,12 @@ function load_data!(dest::AbstractArray{T}, words::Vector{UInt64}, widx::Int64,
 end
 
 """
-    segment_sizes(words::Vector{UInt64}, fidx::Int64) -> (sizes...)
+    segment_sizes(words::Vector{UInt64}, fidx::Int64) -> (sizes...,)
 
 Returns a tuple containing the sizes of the segments of the Capnp frame starting
 at `words[fidx]`.
 """
-function segment_sizes(words::Vector{UInt64}, fidx::Int64)::Tuple{Int64, Vararg{Int64}}
+function segment_sizes(words::Vector{UInt64}, fidx::Int64)
     numsegs = load_value(UInt32, words, fidx, 1) + 1
     # We don't support empty frames (yet?)
     @assert numsegs != 0 "empty frame @$fidx"
@@ -132,21 +128,21 @@ end
 Returns a tuple containing the index of the each segment of the frame starting
 at `words[fidx]` and the index of the start of the next frame.
 """
-function segment_idxs(words::Vector{UInt64}, fidx::Int64)::Tuple{Int64, Vararg{Int64}}
+function segment_idxs(words::Vector{UInt64}, fidx::Int64)
     seg_sizes = segment_sizes(words, fidx)
     hdr_size = cld(length(seg_sizes)+1, 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
-    cumsum(Tuple(Iterators.flatten((fidx+hdr_size, seg_sizes))))
+    cumsum((fidx+hdr_size, seg_sizes...))
 end
 
 """
-    frame_idx(sidxs::Tuple{Int64, Vararg{Int64}}) -> fidx
+    frame_idx(sidxs::Vararg{Int64,N}) -> fidx
 
 Given a tuple of segment indices (as returned by `segment_idxs`), return the
 index of the start of the frame containing those segments.  Note that the length
 of `sidxs` should be one more than the number of segments in the frame (i.e. it
 should include the index of the start of the next frame).
 """
-function frame_idx(sidxs::Tuple{Int64, Vararg{Int64}})::Int64
+function frame_idx(sidxs::Vararg{Int64,N})::Int64 where N
     hdr_size = cld(length(sidxs), 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
     sidxs[1] - hdr_size
 end
@@ -160,7 +156,7 @@ Construct a `T` from the Capnp frame starting at index `fidx` of `words`.  Any
 function capnp_frame(::Type{T}, words::Vector{UInt64}, fidx::Int64; kwargs...)::T where {T}
     @debug "frame @$fidx"
     sidxs = segment_idxs(words, fidx)
-    T(words, sidxs[1], sidxs; kwargs...)
+    T(words, sidxs[1], sidxs...; kwargs...)
 end
 
 # Default factory methods
@@ -257,8 +253,13 @@ function Base.iterate(iter::CapnpReader{T,F}, fidx::Int64=1) where {T,F}
     Base.isdone(iter, fidx) && return nothing
 
     seg_sizes = segment_sizes(iter.words, fidx)
-    hdr_size = cld(length(seg_sizes)+1, 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
-    nextfidx = (fidx + hdr_size + sum(seg_sizes)) % Int64
+    numsegs = length(seg_sizes)
+    if numsegs == 2
+        nextfidx = (fidx + 2 + seg_sizes[1] + seg_sizes[2]) % Int64
+    else
+        hdr_size = cld(numsegs+1, 2) # 2 == sizeof(UInt64)/sizeof(UInt32)
+        nextfidx = (fidx + hdr_size + sum(seg_sizes)) % Int64
+    end
     #@show fidx hdr_size seg_sizes nextfidx
     F(T, (iter.words, fidx)), nextfidx
 end

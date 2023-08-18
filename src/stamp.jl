@@ -98,7 +98,7 @@ end
 """
     Stamp((words, fidx::Int64); withdata=true)
     Stamp(words, fidx::Int64; withdata=true)
-    Stamp(words, widx::Int64, sidxs::Tuple{Int64,...}; withdata=true)
+    Stamp(words, widx::Int64, sidxs::Vararg{Int64,N}; withdata=true)
 
 Construct a Stamp object by parsing the Capnp frame starting at `words[fidx]`
 and having segment indices of `words` given by `sidxs`.  The methods with `fidx`
@@ -113,15 +113,13 @@ The `withdata` keyword argument dictates whether the Stamp's Filterbank
 component will have a populated `data` field (`withdata=true`) or an empty
 `data` field (`withdata=false`).
 """
-function Stamp(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Vararg{Int64}};
-                    withdata=true)
+function Stamp(words::Vector{UInt64}, widx::Int64, sidxs::Vararg{Int64,N};
+                    withdata=true) where N
     @debug "Stamp @$widx"
-
-    ptype, offset, ndata, nptrs = parseword(words[widx])
 
     # A capnp Stamp is a struct with up to 11 (supported) words of data and
     # up to 5 pointers
-    @assert ptype == CapnpStruct "ptype $ptype @$widx"
+    offset, ndata, nptrs = parseword_struct(words[widx])
     @assert 0 < ndata <= 11 "ndata $ndata @$widx"
     @assert 0 < nptrs <=  5 "nptrs $nptrs @$widx"
 
@@ -151,13 +149,13 @@ function Stamp(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Vararg{Int
     if withdata && nptrs > 1
         data = Array{ComplexF32,4}(undef, numAntennas, numPolarizations,
                                           numChannels, numTimesteps)
-        load_data!(reinterpret(Float32, data), words, pidx+1, sidxs)
+        load_data!(reinterpret(Float32, data), words, pidx+1, sidxs...)
     else
         data = ComplexF32[;;;;]
     end
 
     seticoreVersion = nptrs > 2 ? load_string(words, pidx+2) : ""
-    signal = nptrs > 3 ? Signal(words, pidx+3, sidxs) : nothing
+    signal = nptrs > 3 ? Signal(words, pidx+3, sidxs...) : nothing
     obsid = nptrs > 4 ? load_string(words, pidx+4) : ""
 
     Stamp(
@@ -185,7 +183,18 @@ function Stamp(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Vararg{Int
 end
 
 function Stamp(words::Vector{UInt64}, fidx::Int64; withdata=true)
-    capnp_frame(Stamp, words, fidx; withdata)
+    # The expected nuumber of segments is 2 so in that case we provide a
+    # non-dynamically dispatched branch.
+    numsegs = load_value(UInt32, words, fidx, 1) + 1
+    if numsegs == 2
+        hdr_size = cld(numsegs+1, 2)
+        s1idx = fidx + hdr_size
+        s2idx = s1idx + load_value(UInt32, words, fidx, 2)
+        nfidx = s2idx + load_value(UInt32, words, fidx, 3)
+        Stamp(words, s1idx, s1idx, s2idx, nfidx; withdata)
+    else
+        capnp_frame(Stamp, words, fidx; withdata)
+    end
 end
 
 function Stamp(t::Tuple{Vector{UInt64}, Int64}; withdata=true)

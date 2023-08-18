@@ -67,19 +67,17 @@ struct Signal
 end
 
 """
-    Signal(words, widx, sidxs)
+    Signal(words::Vector{UInt64}, widx::Int64, sidxs::Vararg{Int64,N})
 
 Construct a `Signal` from Capnp `words` starting at `widx` using segment indices
 `sidxs`.
 """
-function Signal(words::Vector{UInt64}, widx::Int64, _::Tuple{Int64,Vararg{Int64}})
+function Signal(words::Vector{UInt64}, widx::Int64, _::Vararg{Int64,N}) where N
     @debug "Signal @$widx"
-
-    ptype, offset, ndata, nptrs = parseword(words[widx])
 
     # A capnp Signal is a struct with up to 6 (supported) words of data and zero
     # pointers
-    @assert ptype == CapnpStruct "ptype $ptype @$widx"
+    offset, ndata, nptrs = parseword_struct(words[widx])
     @assert 0 < ndata <= 6 "ndata $ndata @$widx"
     @assert nptrs == 0 "nptrs $nptrs @$widx"
 
@@ -144,20 +142,18 @@ struct Filterbank
 end
 
 """
-    Filterbank(words, widx, sidxs)
+    Filterbank(words::Vector{UInt64}, widx::Int64, sidxs::Vararg{Int64,N})
 
 Construct a `Filterbank` from Capnp `words` starting at `widx` using segment
 indices `sidxs`.
 """
-function Filterbank(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Vararg{Int64}};
-                    withdata=true)
+function Filterbank(words::Vector{UInt64}, widx::Int64, sidxs::Vararg{Int64,N};
+                    withdata=true) where N
     @debug "Filterbank @$widx"
-
-    ptype, offset, ndata, nptrs = parseword(words[widx])
 
     # A capnp Filterbank is a struct with up to 9 (supported) words of data and
     # 2 pointers (sourceName and data)
-    @assert ptype == CapnpStruct "ptype $ptype @$widx"
+    offset, ndata, nptrs = parseword_struct(words[widx])
     @assert 0 < ndata <= 9 "ndata $ndata @$widx"
     @assert nptrs == 2 "nptrs $nptrs @$widx"
 
@@ -183,7 +179,7 @@ function Filterbank(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Varar
     sourceName = load_string(words, pidx)
     if withdata
         data = Matrix{Float32}(undef, numChannels, numTimesteps)
-        load_data!(data, words, pidx+1, sidxs)
+        load_data!(data, words, pidx+1, sidxs...)
     else
         data = Float32[;;]
     end
@@ -227,7 +223,7 @@ end
 """
     Hit((words, fidx::Int64); withdata=true)
     Hit(words, fidx::Int64; withdata=true)
-    Hit(words, widx::Int64, sidxs::Tuple{Int64,...}; withdata=true)
+    Hit(words, widx::Int64, sidxs::Vararg{Int64,N}; withdata=true)
 
 Construct a Hit object by parsing the Capnp frame starting at `words[fidx]` and
 having segment indices of `words` given by `sidxs`.  The methods with `fidx`
@@ -242,28 +238,37 @@ The `withdata` keyword argument dictates whether the Hit's Filterbank component
 will have a populated `data` field (`withdata=true`) or an empty `data`
 field (`withdata=false`).
 """
-function Hit(words::Vector{UInt64}, widx::Int64, sidxs::Tuple{Int64,Vararg{Int64}};
-             withdata=true)
+function Hit(words::Vector{UInt64}, widx::Int64, sidxs::Vararg{Int64,N};
+             withdata=true) where N
     @debug "Hit @$widx"
 
-    ptype, offset, ndata, nptrs = parseword(words[widx])
-
     # A capnp Hit is a struct with zero data values and two pointers (structs)
-    @assert ptype == CapnpStruct "ptype $ptype @$widx"
+    offset, ndata, nptrs = parseword_struct(words[widx])
     @assert ndata == 0 "ndata $ndata @$widx"
     @assert nptrs == 2 "nptrs $nptrs @$widx"
 
     # Pointer index
     pidx = widx + 1 + offset + ndata
 
-    signal     = Signal(    words, pidx,   sidxs)
-    filterbank = Filterbank(words, pidx+1, sidxs; withdata)
+    signal     = Signal(    words, pidx,   sidxs...)
+    filterbank = Filterbank(words, pidx+1, sidxs...; withdata)
 
     Hit(signal, filterbank)
 end
 
 function Hit(words::Vector{UInt64}, fidx::Int64; withdata=true)
-    capnp_frame(Hit, words, fidx; withdata)
+    # The expected nuumber of segments is 2 so in that case we provide a
+    # non-dynamically dispatched branch.
+    numsegs = load_value(UInt32, words, fidx, 1) + 1
+    if numsegs == 2
+        hdr_size = cld(numsegs+1, 2)
+        s1idx = fidx + hdr_size
+        s2idx = s1idx + load_value(UInt32, words, fidx, 2)
+        nfidx = s2idx + load_value(UInt32, words, fidx, 3)
+        Hit(words, s1idx, s1idx, s2idx, nfidx; withdata)
+    else
+        capnp_frame(Hit, words, fidx; withdata)
+    end
 end
 
 function Hit(t::Tuple{Vector{UInt64}, Int64}; withdata=true)
