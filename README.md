@@ -38,9 +38,9 @@ reader = CapnpReader(Hit, "mydatafile.hits")
 With our `CapnpReader` we can now create Hits.  We could call the `Hit`
 constructor ourselves, but it is generally easier and more efficient to iterate
 through our `CapnpReader`.  Calling the `Hit` (or `Stamp`) constructor directly
-is most useful when you want a specific one and you know its "frame index" (or
-the closely related "byte offset").  Here is a simple `for` loop that will read
-all the Hits of the file associated with `reader`:
+is most useful when you want a specific one and you know its "frame index".
+Here is a simple `for` loop that will read all the Hits of the file associated
+with `reader`:
 
 ```julia
 # Loop through all Hits in the file
@@ -221,9 +221,9 @@ CapnpReader(f::Function ::Type{T}, fname::AbstractString)
 This is the most generic `CapnpReader` constructor.  Iterating over
 the returned object will call `f(T, t::Tuple{Vector{UInt64}, Int64})`
 for each object in the Capnp file and return the result.  In this context, `f`
-is a factory function that will load on object of type `T` from the file
+is a factory function that will load an object of type `T` from the file
 (actually the `Vector` and `Int64` of the tuple) and then return the object or
-some variation of it (e.g. the object and the file offset from which it was
+some variation of it (e.g. the object and the file index from which it was
 read).  Factory methods can use any constructor method of type `T`, such as to
 pass keyword arguments.  A number of useful factory methods are defined in the
 `SeticoreCapnp` module.
@@ -289,30 +289,35 @@ The following factory methods are provided:
 
   Default factory that returns `T(t)`.
 
-- `nodata_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
-
-  Like `default_factory` but passes `withdata=false` to omit data.  The
-  `withdata` keyword is supported by the `Filterbank`, `Hit` and `Stamp`
-  constructors.  Returns an instance of `T`.
-
-- `offset_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
-
-  Like `nodata_factory` but returns a `Tuple{T,Int64}` where the `Int64`
-  is the zero based byte offset of the start of the frame from which the
-  object was read.
-
 - `index_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
 
-  Like `offset_factory` but the `Int64` is the one based word (`UInt64`)
-  offset of the start of the frame from which the object was read.
+  Like `default_factory` but returns a `Tuple{T,Int64}` where the `Int64`
+  is the one-based word (`UInt64`) index of the start of the frame from which
+  the object was read.
 
-### More on flattening with offset/index factory functions
+- `nodata_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
 
-When using `offset_factory` or `index_factory`, the type returned by iterating
-is a `Tuple{T, Int64}`, where `T` is typically `Hit` or `Stamp`.  `NamedTuple`
-constructors are provided for this Tuple types `Tuple{Hit,Int64}` and
-`Tuple{Stamp,Int64}`.  These constructors are the same as the `NamedTuple`
-constructors provided for `Hit` and `Stamp` objects, but the constructor for
-these `Tuple` types include a final field containing the Int64 value from the
-`Tuple`.  The name of this extra field defaults to `:file_offswt`, but this can
-be overridden by passing a `Symbol` as the second paramweter of the constructor.
+  Like `default_factory` but passes `withdata=false` to omit data (i.e. the
+  `data` field is an empty `Array`).  The `withdata` keyword is supported by the
+  `Filterbank`, `Hit` and `Stamp` constructors.  Returns an instance of `T`.
+
+- `nodata_index_factory(::Type{T}, t:Tuple{Vector{UInt64}, Int64}) where T`
+
+  Like `index_factory` but also omits the data field like `nodata_factory`.
+
+### More on flattening with index factory functions
+
+When using `index_factory` or `nodata_index_factory`, the type returned by
+iterating is a `Tuple{T, Int64}`, where `T` is typically `Hit` or `Stamp`.
+`NamedTuple` constructors are provided that take type `T` and an index, as well
+as optional data array.  For example, when using `nodata_index_factory` to read
+a hits file, one could create a `Vector` of `HitIndexNamedTuple` instances using
+`map`:
+
+```julia
+nodata_index_hit_reader = CapnpReader(nodata_index_factory, Hit, "myhits.hits")
+
+nts = map(nodata_index_hit_reader) do (hit, idx)
+    NamedTuple(hit, idx)
+end
+```

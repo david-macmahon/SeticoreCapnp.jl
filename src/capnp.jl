@@ -177,12 +177,12 @@ function nodata_factory(::Type{T}, t::FactoryTuple)::T where T
     T(t; withdata=false)
 end
 
-function offset_factory(::Type{T}, t::FactoryTuple)::Tuple{T, Int64} where T
+function index_factory(::Type{T}, t::FactoryTuple)::Tuple{T, Int64} where T
     fidx = t[2]
-    (T(t; withdata=false), 8*(fidx-1))
+    (T(t), fidx)
 end
 
-function index_factory(::Type{T}, t::FactoryTuple)::Tuple{T, Int64} where T
+function nodata_index_factory(::Type{T}, t::FactoryTuple)::Tuple{T, Int64} where T
     fidx = t[2]
     (T(t; withdata=false), fidx)
 end
@@ -298,16 +298,6 @@ function Base.eltype(::Type{CapnpReader{T,nodata_factory}}) where {T}
     T
 end
 
-# Offset factory eltype
-
-function Base.IteratorEltype(::Type{CapnpReader{T,offset_factory}}) where {T}
-    Base.HasEltype()
-end
-
-function Base.eltype(::Type{CapnpReader{T,offset_factory}}) where {T}
-    Tuple{T, Int64}
-end
-
 # Index factory eltype
 
 function Base.IteratorEltype(::Type{CapnpReader{T,index_factory}}) where {T}
@@ -315,5 +305,15 @@ function Base.IteratorEltype(::Type{CapnpReader{T,index_factory}}) where {T}
 end
 
 function Base.eltype(::Type{CapnpReader{T,index_factory}}) where {T}
+    Tuple{T, Int64}
+end
+
+# No-data index factory eltype
+
+function Base.IteratorEltype(::Type{CapnpReader{T,nodata_index_factory}}) where {T}
+    Base.HasEltype()
+end
+
+function Base.eltype(::Type{CapnpReader{T,nodata_index_factory}}) where {T}
     Tuple{T, Int64}
 end
