@@ -77,92 +77,136 @@ up a hit.
 
 Sometimes it is convenient to represent a collection of Hits or Stamps as a
 table or `DataFrame`.  To facilitate this, a `Hit` or `Stamp` instance can be
-flattened to a `NamedTuple` by passing it to the `NamedTuple` constructor.  When
+flattened to a `NamedTuple` by passing it to a `NamedTuple` constructor.  When
 flattening a `Hit` or `Stamp` to a `NamedTuple`, only one copy of redundant
-fields is retained and the `data` field is omitted.  The `NamedTuple`
-constructor can also be *broadcast* over an iterator, such as our reader object,
-to produce a `Vector` (i.e. list) of the iterator's Hits or Stamps.
+fields is retained.  `SeticoreCapnp` defines eight `NamedTuple` constructor
+meethods for `Hits` and `Stamps` (a total of 16).  The `NamedTuple` constructors
+can also be *broadcast* over an iterator, such as our reader object, to produce
+a `Vector` (i.e. list) of `NamedTuple`s for the iterator's Hits or Stamps.
+
+The eight related `NamedTuple` constructors produce `NamedTuple`s with the main
+fields of a `Hit` or `Stamp`, plus optional additional fields that depend on the
+parameters passed to the constructors.  In the folowing table, `HS` is a place
+holder for `Hit` or `Stamp` (e.g. `HSDataIndexNamedTuple` could be a
+`HitDataIndexNamedTuple` or a `StampDataIndexNamedTuple`).
+
+| Type alias                  | Constructor signature                                                                           |
+|:----------------------------|:------------------------------------------------------------------------------------------------|
+| HSNamedTuple                | NamedTuple(hs::HS)                                                                              |
+| HSIndexNamedTuple           | NamedTuple(hs::HS, fileindex::Int64)                                                            |
+| HSDataNamedTuple            | NamedTuple(hs::HS, data)                                                                        |
+| HSDataIndexNamedTuple       | NamedTuple(hs::HS, data, fileindex::Int64)                                                      |
+| HSGlobalNamedTuple          | NamedTuple(hs::HS, hostname::String, filename::String)                                          |
+| HSIndexGlobalNamedTuple     | NamedTuple(hs::HS, fileindex::Int64, hostname::String, filename::String)                        |
+| HSDataGlobalNamedTuple      | NamedTuple(hs::HS, data, hostname::String, filename::String)                                    |
+| HSDataIndexGlobalNamedTuple | NamedTuple(hs::HS, data, fileindex::Int64, hostname::String, filename::String)                  |
+
+The `data` argument may given as an `Array` (i.e. `Matrix{Float32}` for Hits or
+`Array{Float32,4}` for Stamps) or a `String` to accommodte base64 encoded data.
 
 ```julia
-# Get a list of NamedTuples for (up to) the first 5 Hits.
+# Get a Vector of HitNamedTuples for (up to) the first 5 Hits.
 # Note the `.` that turns this into a *broadcast*.
-nts = NamedTuple.(first(reader, 5))
+hit_nts = NamedTuple.(first(hit_reader, 5))
 ```
 
-In the above example, `nts` will be a `Vector{NamedTuple}`, which means that it
-can be passed to the `DataFrame` constructor from the `DataFrames.jl` package
-(or used with any other Julia package that supports the `Tables.jl` interface).
+In the above example, `hit_nts` will be a `Vector{HitNamedTuple}`, which means
+that it can be passed to the `DataFrame` constructor from the `DataFrames.jl`
+package (or used with any other Julia package that supports the `Tables.jl`
+interface).
 
 #### Hits
 
-The `NamedTuple` for a `Hit` contains these keys:
+The various `NamedTuple` types for a `Hit` contains these keys (some are type
+specific):
 
-| Key              | Value type | Description                                                               |
-|:-----------------|:-----------|:--------------------------------------------------------------------------|
-| :frequency       | Float64    | [S] The frequency the hit starts at (MHz)                                 |
-| :index           | Int32      | [S] The frequency bin the hit starts at (relative to the coarse channel)  |
-| :driftSteps      | Int32      | [S] How many bins the hit drifts over                                     |
-| :driftRate       | Float64    | [S] The drift rate (Hz/s)                                                 |
-| :snr             | Float32    | [S] The signal-to-noise ratio for the hit                                 |
-| :coarseChannel   | Int32      | [S] Which coarse channel this hit is in                                   |
-| :beam            | Int32      | [S] Which beam this hit is in (-1 for incoherent beam)                    |
-| :power           | Float32    | [S] Total power of the hit (counts)                                       |
-| :incoherentPower | Float32    | [S] Total power of the hit in the incoherent beam (counts) or 0.0         |
-| :sourceName      | String     | [F] Source name for the beam                                              |
-| :fch1            | Float64    | [F] Frequency of first channel in `data` (MHz)                            |
-| :foff            | Float64    | [F] Channel width of `data` (MHz)                                         |
-| :tstart          | Float64    | [F] Start time of `data` (MJD)                                            |
-| :tsamp           | Float64    | [F] Time step of `data` (seconds)                                         |
-| :ra              | Float64    | [F] Right ascention of beam (hours)                                       |
-| :dec             | Float64    | [F] Declination of beam (degrees)                                         |
-| :telescopeId     | Int32      | [F] Telescope ID number                                                   |
-| :numTimesteps    | Int32      | [F] Number of time samples in `data`                                      |
-| :numChannels     | Int32      | [F] Number of frequency channels in `data`                                |
-| :startChannel    | Int32      | [F] First channel of data is from this fine channel within coarse channel |
+| Key              | Value type | Description                                                                 |
+|:-----------------|:-----------|:----------------------------------------------------------------------------|
+| :frequency       | Float64    | `[S]` The frequency the hit starts at (MHz)                                 |
+| :index           | Int32      | `[S]` The frequency bin the hit starts at (relative to the coarse channel)  |
+| :driftSteps      | Int32      | `[S]` How many bins the hit drifts over                                     |
+| :driftRate       | Float64    | `[S]` The drift rate (Hz/s)                                                 |
+| :snr             | Float32    | `[S]` The signal-to-noise ratio for the hit                                 |
+| :coarseChannel   | Int32      | `[S]` Which coarse channel this hit is in                                   |
+| :beam            | Int32      | `[S]` Which beam this hit is in (-1 for incoherent beam)                    |
+| :power           | Float32    | `[S]` Total power of the hit (counts)                                       |
+| :incoherentPower | Float32    | `[S]` Total power of the hit in the incoherent beam (counts) or 0.0         |
+| :sourceName      | String     | `[F]` Source name for the beam                                              |
+| :fch1            | Float64    | `[F]` Frequency of first channel in `data` (MHz)                            |
+| :foff            | Float64    | `[F]` Channel width of `data` (MHz)                                         |
+| :tstart          | Float64    | `[F]` Start time of `data` (MJD)                                            |
+| :tsamp           | Float64    | `[F]` Time step of `data` (seconds)                                         |
+| :ra              | Float64    | `[F]` Right ascention of beam (hours)                                       |
+| :dec             | Float64    | `[F]` Declination of beam (degrees)                                         |
+| :telescopeId     | Int32      | `[F]` Telescope ID number                                                   |
+| :numTimesteps    | Int32      | `[F]` Number of time samples in `data`                                      |
+| :numChannels     | Int32      | `[F]` Number of frequency channels in `data`                                |
+| :startChannel    | Int32      | `[F]` First channel of data is from this fine channel within coarse channel |
+| :data            | (see text) | `[D]` Data array of hit's Filterbank "swatch"                               |
+| :fileindex       | Int64      | `[I]` Word index of hit within hits file                                    |
+| :hostname        | String     | `[G]` Hostname on which the hits file resides                               |
+| :filename        | String     | `[G]` Full path of the hits file                                            |
 
-- Fields with `[S]` are from the Hit's `signal` field.
-- Fields with `[F]` are from the Hit's `filterbank` field.
+- `[S]` fields are from the Hit's `signal` field.
+- `[F]` fields are from the Hit's `filterbank` field.
+- `[D]` field  is only present in `HitData*NamedTuple` types.
+- `[I]` field  is only present in `Hit*Index*NamedTuple` types.
+- `[G]` fields is only present in `Hit*GlobalNamedTuple` types.
 
 The `numChannels` and `numTimesteps` fields give the dimensions of the `data`
-field of the `Hit`, though the `data` field is not included in the `NamedTuple`.
+field of the `Hit`.  It is possible, though unusual, for the `data` field of the
+`HitData*NamedTuple` to have different dimensions.  The `data` field is a
+`Union{String,Matrix{Float32}}` to allow it to be passed as a `Matrix{Float32}`
+or a `String` (e.g. a base64 encoded `Matrix{Float32}`).
 
 #### Stamps
 
-The `NamedTuple` for `Stamps` contains these keys:
+The various `NamedTuple` types for `Stamps` contains these keys (some are type
+specific):
 
-| Key               | Value type | Note                                                                     |
-|:------------------|:-----------|:-------------------------------------------------------------------------|
-| :seticoreVersion  | String     | Version of seticore                                                      |
-| :sourceName       | String     | Source name of primary pointing                                          |
-| :ra               | Float64    | Right ascension of primary pointing (hours)                              |
-| :dec              | Float64    | Declination of primary pointing (degrees)                                |
-| :fch1             | Float64    | Frequency of first channel in `data` (MHz)                               |
-| :foff             | Float64    | Channel width of `data` (MHz)                                            |
-| :tstart           | Float64    | Start time of `data` (MHz)                                               |
-| :tsamp            | Float64    | Time step of `data` (seconds)                                            |
-| :telescopeId      | Int32      | Telescope ID number                                                      |
-| :coarseChannel    | Int32      | Coarse channel from which `data` was extracted                           |
-| :fftSize          | Int32      | FFT size using to create channels in `data`                              |
-| :startChannel     | Int32      | First fine channel in `data`                                             |
-| :numTimesteps     | Int32      | Number of time samples in `data`                                         |
-| :numChannels      | Int32      | Number of frequency channels in `data`                                   |
-| :numPolarizations | Int32      | Number of polarizations in `data`                                        |
-| :numAntennas      | Int32      | Number of antennas in `data`                                             |
-| :frequency        | Float64    | [S] The frequency the hit starts at (MHz)                                |
-| :index            | Int32      | [S] The frequency bin the hit starts at (relative to the coarse channel) |
-| :driftSteps       | Int32      | [S] How many bins the hit drifts over                                    |
-| :driftRate        | Float64    | [S] The drift rate (Hz/s)                                                |
-| :snr              | Float32    | [S] The signal-to-noise ratio for the hit                                |
-| :beam             | Int32      | [S] Which beam this hit is in (-1 for incoherent beam)                   |
-| :power            | Float32    | [S] Total power of the hit (counts)                                      |
-| :incoherentPower  | Float32    | [S] Total power of the hit in the incoherent beam (counts) or 0.0        |
+| Key               | Value type | Note                                                                       |
+|:------------------|:-----------|:---------------------------------------------------------------------------|
+| :seticoreVersion  | String     | Version of seticore                                                        |
+| :sourceName       | String     | Source name of primary pointing                                            |
+| :ra               | Float64    | Right ascension of primary pointing (hours)                                |
+| :dec              | Float64    | Declination of primary pointing (degrees)                                  |
+| :fch1             | Float64    | Frequency of first channel in `data` (MHz)                                 |
+| :foff             | Float64    | Channel width of `data` (MHz)                                              |
+| :tstart           | Float64    | Start time of `data` (MHz)                                                 |
+| :tsamp            | Float64    | Time step of `data` (seconds)                                              |
+| :telescopeId      | Int32      | Telescope ID number                                                        |
+| :coarseChannel    | Int32      | Coarse channel from which `data` was extracted                             |
+| :fftSize          | Int32      | FFT size using to create channels in `data`                                |
+| :startChannel     | Int32      | First fine channel in `data`                                               |
+| :numTimesteps     | Int32      | Number of time samples in `data`                                           |
+| :numChannels      | Int32      | Number of frequency channels in `data`                                     |
+| :numPolarizations | Int32      | Number of polarizations in `data`                                          |
+| :numAntennas      | Int32      | Number of antennas in `data`                                               |
+| :frequency        | Float64    | `[S]` The frequency the hit starts at (MHz)                                |
+| :index            | Int32      | `[S]` The frequency bin the hit starts at (relative to the coarse channel) |
+| :driftSteps       | Int32      | `[S]` How many bins the hit drifts over                                    |
+| :driftRate        | Float64    | `[S]` The drift rate (Hz/s)                                                |
+| :snr              | Float32    | `[S]` The signal-to-noise ratio for the hit                                |
+| :beam             | Int32      | `[S]` Which beam this hit is in (-1 for incoherent beam)                   |
+| :power            | Float32    | `[S]` Total power of the hit (counts)                                      |
+| :incoherentPower  | Float32    | `[S]` Total power of the hit in the incoherent beam (counts) or 0.0        |
+| :data             | (see text) | `[D]` Data array of stamp                                                  |
+| :fileindex        | Int64      | `[I]` Word index of stamp within stamps file                               |
+| :hostname         | String     | `[G]` Hostname on which the stamps file resides                            |
+| :filename         | String     | `[G]` Full path of the stamps file                                         |
 
-- Fields with `[S]` are from the `signal` field of the highest SNR `Hit`
-  associated with this `Stamp`.
+- `[S]` fields are from the `signal` field of the highest SNR `Hit` associated
+  with this `Stamp`.
+- `[D]` field  is only present in `StampData*NamedTuple` types.
+- `[I]` field  is only present in `Stamp*Index*NamedTuple` types.
+- `[G]` fields is only present in `Stamp*GlobalNamedTuple` types.
 
 The `numAntennas`, `numPolarizations`, `numChannels`, and `numTimesteps` fields
-give the dimensions of the `data` array of the `Stamp`, though the `data` field
-is not included in the `NamedTuple`.
+give the dimensions of the `data` array of the `Stamp`.  It is possible, though
+unusual, for the `data` field of the `StampData*NamedTuple` to have different
+dimensions.  The `data` field is a `Union{String,Array{Float32,4}}` to allow it
+to be passed as an `Array{Float32,4}` or a `String` (e.g. a base64 encoded
+`Array{Float32,4}`).
 
 ### Extracting the `data`
 
