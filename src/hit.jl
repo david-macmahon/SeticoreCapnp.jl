@@ -5,7 +5,7 @@ The `Signal` struct contains information about a linear signal we found.  Some
 of this is redundant if the `Filterbank` is present, so that the `Signal` is
 still useful on its own.
 """
-struct Signal
+struct Signal <: AbstractCapnpStruct
     """
     The frequency the hit starts at
     """
@@ -113,7 +113,7 @@ end
 The `Filterbank` struct contains a smaller slice of the larger filterbank that
 we originally found this hit in.
 """
-struct Filterbank
+struct Filterbank <: AbstractCapnpStruct
     # These fields are like the ones found in FBH5 files.
     sourceName::String
     fch1::Float64
@@ -215,7 +215,7 @@ A hit without a signal indicates that we looked for a hit here and didn't find o
 A hit without a filterbank indicates that to save space we didn't store any filterbank
 data in this file; it should be available elsewhere.
 """
-struct Hit
+struct Hit <: AbstractCapnpStruct
     signal::Union{Nothing,Signal}
     filterbank::Union{Nothing,Filterbank}
 end

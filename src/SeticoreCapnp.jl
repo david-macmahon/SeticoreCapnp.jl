@@ -6,7 +6,10 @@ export save_hits
 using Mmap
 using PyCall
 
+abstract type AbstractCapnpStruct end
+
 include("capnp.jl")
+include("equality.jl")
 
 const CapnpHit = Ref{PyObject}()
 const CapnpStamp = Ref{PyObject}()

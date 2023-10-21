@@ -5,7 +5,7 @@ A "postage stamp" of data extracted from a larger set of raw data.
 This data has been upchannelized with an FFT but is still multi-antenna
 complex voltages.
 """
-struct Stamp
+struct Stamp <: AbstractCapnpStruct
   """
   The seticore version that generated this data.
   """
