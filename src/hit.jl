@@ -206,7 +206,7 @@ function getdata(f::Filterbank)
     f.data
 end
 
-function getdata(::Nothing)
+function getdata(::Missing)
     Float32[;;]
 end
 
@@ -216,8 +216,8 @@ A hit without a filterbank indicates that to save space we didn't store any filt
 data in this file; it should be available elsewhere.
 """
 struct Hit <: AbstractCapnpStruct
-    signal::Union{Nothing,Signal}
-    filterbank::Union{Nothing,Filterbank}
+    signal::Union{Missing,Signal}
+    filterbank::Union{Missing,Filterbank}
 end
 
 """

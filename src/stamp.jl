@@ -63,10 +63,10 @@ struct Stamp <: AbstractCapnpStruct
   startChannel::Int32
 
   """
-  Metadata for the best hit we found for this stamp.
-  Not populated for stamps extracted with the `seticore` CLI tool.
+  Metadata for the best hit we found for this stamp.  Not populated (set to
+  `missing`) for stamps extracted with the `seticore` CLI tool.
   """
-  signal::Union{Signal,Nothing}
+  signal::Union{Signal,Missing}
 
   """
   Where the raw file starts in the complete input band (e.g. in the beamforming
@@ -155,7 +155,7 @@ function Stamp(words::Vector{UInt64}, widx::Int64, sidxs::Vararg{Int64,N};
     end
 
     seticoreVersion = nptrs > 2 ? load_string(words, pidx+2) : ""
-    signal = nptrs > 3 ? Signal(words, pidx+3, sidxs...) : nothing
+    signal = nptrs > 3 ? Signal(words, pidx+3, sidxs...) : missing
     obsid = nptrs > 4 ? load_string(words, pidx+4) : ""
 
     Stamp(
