@@ -71,54 +71,37 @@ These same techniques are equally applicable when working with Stamps files.
 The `Hit` structs obtained from a `CapnpReader` contain fields that are
 themselves structs.  The `hit.filterbank.data` field is a `Matrix{Float32}` that
 contains a small spectrogram of the hit.  There are many more fields that make
-up a hit.
+up a `Hit`.
 
 ### Flattening Hits and Stamps
 
 Sometimes it is convenient to represent a collection of Hits or Stamps as a
 table or `DataFrame`.  To facilitate this, a `Hit` or `Stamp` instance can be
-flattened to a `NamedTuple` by passing it to a `NamedTuple` constructor.  When
+flattened to a `NamedTuple` by passing it to the `NamedTuple` constructor.  When
 flattening a `Hit` or `Stamp` to a `NamedTuple`, only one copy of redundant
-fields is retained.  `SeticoreCapnp` defines eight `NamedTuple` constructor
-meethods for `Hits` and `Stamps` (a total of 16).  The `NamedTuple` constructors
-can also be *broadcast* over an iterator, such as our reader object, to produce
-a `Vector` (i.e. list) of `NamedTuple`s for the iterator's Hits or Stamps.
+fields is retained.  In addition to the fields from the `Hit` or `Stamp`, you
+can add additional fields to the `NamedTuple` by passing them as keyword
+arguments to the `NamedTuple` constructor.
 
-The eight related `NamedTuple` constructors produce `NamedTuple`s with the main
-fields of a `Hit` or `Stamp`, plus optional additional fields that depend on the
-parameters passed to the constructors.  In the folowing table, `HS` is a place
-holder for `Hit` or `Stamp` (e.g. `HSDataIndexNamedTuple` could be a
-`HitDataIndexNamedTuple` or a `StampDataIndexNamedTuple`).
-
-| Type alias                  | Constructor signature                                                                           |
-|:----------------------------|:------------------------------------------------------------------------------------------------|
-| HSNamedTuple                | NamedTuple(hs::HS)                                                                              |
-| HSIndexNamedTuple           | NamedTuple(hs::HS, fileindex::Int64)                                                            |
-| HSDataNamedTuple            | NamedTuple(hs::HS, data)                                                                        |
-| HSDataIndexNamedTuple       | NamedTuple(hs::HS, data, fileindex::Int64)                                                      |
-| HSGlobalNamedTuple          | NamedTuple(hs::HS, hostname::String, filename::String)                                          |
-| HSIndexGlobalNamedTuple     | NamedTuple(hs::HS, fileindex::Int64, hostname::String, filename::String)                        |
-| HSDataGlobalNamedTuple      | NamedTuple(hs::HS, data, hostname::String, filename::String)                                    |
-| HSDataIndexGlobalNamedTuple | NamedTuple(hs::HS, data, fileindex::Int64, hostname::String, filename::String)                  |
-
-The `data` argument may given as an `Array` (i.e. `Matrix{Float32}` for Hits or
-`Array{Float32,4}` for Stamps) or a `String` to accommodte base64 encoded data.
+In earlier versions of this package the `NamedTuple` constructor was overloaded
+with additional methods based on positional arguments, but these additional
+`NamedTuple` constructor methods have been deprecated and replaced with the
+keyword arguments approach.  This approach provides much more flexibility.
 
 ```julia
-# Get a Vector of HitNamedTuples for (up to) the first 5 Hits.
+# Get a Vector of NamedTuples for (up to) the first 5 Hits.
 # Note the `.` that turns this into a *broadcast*.
 hit_nts = NamedTuple.(first(hit_reader, 5))
 ```
 
-In the above example, `hit_nts` will be a `Vector{HitNamedTuple}`, which means
+In the above example, `hit_nts` will be a `Vector{NamedTuple}`, which means
 that it can be passed to the `DataFrame` constructor from the `DataFrames.jl`
 package (or used with any other Julia package that supports the `Tables.jl`
 interface).
 
 #### Hits
 
-The various `NamedTuple` types for a `Hit` contains these keys (some are type
-specific):
+A `NamedTuple` constructed from a `Hit` contains these keys:
 
 | Key              | Value type | Description                                                                 |
 |:-----------------|:-----------|:----------------------------------------------------------------------------|
@@ -136,33 +119,16 @@ specific):
 | :foff            | Float64    | `[F]` Channel width of `data` (MHz)                                         |
 | :tstart          | Float64    | `[F]` Start time of `data` (MJD)                                            |
 | :tsamp           | Float64    | `[F]` Time step of `data` (seconds)                                         |
-| :ra              | Float64    | `[F]` Right ascention of beam (hours)                                       |
+| :ra              | Float64    | `[F]` Right ascension of beam (hours)                                       |
 | :dec             | Float64    | `[F]` Declination of beam (degrees)                                         |
 | :telescopeId     | Int32      | `[F]` Telescope ID number                                                   |
 | :numTimesteps    | Int32      | `[F]` Number of time samples in `data`                                      |
 | :numChannels     | Int32      | `[F]` Number of frequency channels in `data`                                |
 | :startChannel    | Int32      | `[F]` First channel of data is from this fine channel within coarse channel |
-| :data            | (see text) | `[D]` Data array of hit's Filterbank "swatch"                               |
-| :fileindex       | Int64      | `[I]` Word index of hit within hits file                                    |
-| :hostname        | String     | `[G]` Hostname on which the hits file resides                               |
-| :filename        | String     | `[G]` Full path of the hits file                                            |
-
-- `[S]` fields are from the Hit's `signal` field.
-- `[F]` fields are from the Hit's `filterbank` field.
-- `[D]` field  is only present in `HitData*NamedTuple` types.
-- `[I]` field  is only present in `Hit*Index*NamedTuple` types.
-- `[G]` fields is only present in `Hit*GlobalNamedTuple` types.
-
-The `numChannels` and `numTimesteps` fields give the dimensions of the `data`
-field of the `Hit`.  It is possible, though unusual, for the `data` field of the
-`HitData*NamedTuple` to have different dimensions.  The `data` field is a
-`Union{String,Matrix{Float32}}` to allow it to be passed as a `Matrix{Float32}`
-or a `String` (e.g. a base64 encoded `Matrix{Float32}`).
 
 #### Stamps
 
-The various `NamedTuple` types for `Stamps` contains these keys (some are type
-specific):
+A `NamedTuple` constructed from a `Stamp` contains these keys:
 
 | Key               | Value type | Note                                                                       |
 |:------------------|:-----------|:---------------------------------------------------------------------------|
@@ -190,32 +156,18 @@ specific):
 | :beam             | Int32      | `[S]` Which beam this hit is in (-1 for incoherent beam)                   |
 | :power            | Float32    | `[S]` Total power of the hit (counts)                                      |
 | :incoherentPower  | Float32    | `[S]` Total power of the hit in the incoherent beam (counts) or 0.0        |
-| :data             | (see text) | `[D]` Data array of stamp                                                  |
-| :fileindex        | Int64      | `[I]` Word index of stamp within stamps file                               |
-| :hostname         | String     | `[G]` Hostname on which the stamps file resides                            |
-| :filename         | String     | `[G]` Full path of the stamps file                                         |
 
 - `[S]` fields are from the `signal` field of the highest SNR `Hit` associated
   with this `Stamp`.
-- `[D]` field  is only present in `StampData*NamedTuple` types.
-- `[I]` field  is only present in `Stamp*Index*NamedTuple` types.
-- `[G]` fields is only present in `Stamp*GlobalNamedTuple` types.
-
-The `numAntennas`, `numPolarizations`, `numChannels`, and `numTimesteps` fields
-give the dimensions of the `data` array of the `Stamp`.  It is possible, though
-unusual, for the `data` field of the `StampData*NamedTuple` to have different
-dimensions.  The `data` field is a `Union{String,Array{Float32,4}}` to allow it
-to be passed as an `Array{Float32,4}` or a `String` (e.g. a base64 encoded
-`Array{Float32,4}`).
 
 ### Extracting the `data`
 
-Sometimes you just want to get at the data, specifically the
-`filterbank.data` field of Hits or the `data` field of Stamps.  Here are a few
-of the many ways that this can be done:
+Sometimes you just want to get at the data, specifically the `filterbank.data`
+field of Hits or the `data` field of Stamps.  Here are a few of the many ways
+that this can be done:
 
 ```julia
-# Using the `map` function
+# Using the `map` function (use `Iterators.map` for a lazy version)
 datas = map(h->h.filterbank.data, reader)
 
 # Using a list comprehension
@@ -232,7 +184,7 @@ The variable `datas` is double pluralized to remind us that in each example it
 is a list of data arrays.  For Hits, each data array is a `Matrix{Float32}`, so
 `datas` will be a `Vector{Matrix{Float32}}`.  For Stamps, each data array is an
 `Array{Complex{Float32},4}`, so `datas` will be a
-`Vector{Array{Complex{Float32}}}`.
+`Vector{Array{Complex{Float32,4}}}`.
 
 The `data` for each `Hit` is a `Matrix{Float32}` sized as `(numChannels,
 numTimesteps)`.
@@ -353,15 +305,25 @@ The following factory methods are provided:
 
 When using `index_factory` or `nodata_index_factory`, the type returned by
 iterating is a `Tuple{T, Int64}`, where `T` is typically `Hit` or `Stamp`.
-`NamedTuple` constructors are provided that take type `T` and an index, as well
-as optional data array.  For example, when using `nodata_index_factory` to read
-a hits file, one could create a `Vector` of `HitIndexNamedTuple` instances using
-`map`:
+These extra return values can be passed to the `NamedTuple` constructors for
+`Hit` and `Stamp` to create additional fields in the `NamedTuple` instances.
+Using `map` over the `CapnpReader` provides a way to create a Vector of
+`NamedTuple`s with these addition fields:
 
 ```julia
+# Create a CapnpReader that uese the nodata_index_factory
 nodata_index_hit_reader = CapnpReader(nodata_index_factory, Hit, "myhits.hits")
 
-nts = map(nodata_index_hit_reader) do (hit, idx)
-    NamedTuple(hit, idx)
+# Create a Vector or NamedTuples with an extra fileindex field
+nts = map(nodata_index_hit_reader) do (hit, fileindex)
+    NamedTuple(hit; fileindex)
 end
+
+# Create a DataFrame from the NamedTuples
+df = DataFrame(nts)
+
+# Do it without retaining the Vector of NamedTuples
+df1 = map(nodata_index_hit_reader) do (hit, fileindex)
+    NamedTuple(hit; fileindex)
+end |> DataFrame
 ```

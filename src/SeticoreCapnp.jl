@@ -5,6 +5,7 @@ export save_hits
 
 using Mmap
 using PyCall
+import Core: NamedTuple
 
 abstract type AbstractCapnpStruct end
 

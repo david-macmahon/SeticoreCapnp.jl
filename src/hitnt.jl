@@ -1,27 +1,11 @@
-# Hit NamedTuple types
-
-# This let block defines and exports 8 NamedTuple type aliases for Hits and
-# defines NamedTuple constructors for them.  The `data_field_type` type allows
-# for the data field to be a Matrix{Float32} or a String (e.g. a Base64 encoded
-# Matrix{Float32}).
-
-let data_field_type = Union{String, Matrix{Float32}}, alias_names_types = (
-    ("HitNamedTuple",                (                                       ), (                                      )),
-    ("HitIndexNamedTuple",           (       :fileindex,                     ), (                 Int64,               )),
-    ("HitDataNamedTuple",            (:data,                                 ), (data_field_type,                      )),
-    ("HitDataIndexNamedTuple",       (:data, :fileindex,                     ), (data_field_type, Int64,               )),
-    ("HitGlobalNamedTuple",          (                   :hostname, :filename), (                        String, String)),
-    ("HitIndexGlobalNamedTuple",     (       :fileindex, :hostname, :filename), (                 Int64, String, String)),
-    ("HitDataGlobalNamedTuple",      (:data,             :hostname, :filename), (data_field_type,        String, String)),
-    ("HitDataIndexGlobalNamedTuple", (:data, :fileindex, :hostname, :filename), (data_field_type, Int64, String, String)),
-)
-
-for (alias, names, types) in alias_names_types
-@eval begin
-export $(Symbol(alias))
+# Construct a NamedTuple from a Hit
 
 """
-`$($alias)` is a `NamedTuple` type for a `Hit`.  It contains these keys:
+    NamedTuple(hit::Hit; kwargs...)
+
+Construct a `NamedTuple` that is a flattened representation of `hit`. The keys
+shown in the following table are always included.  Any given `kwargs` will
+be added at the end of the `NamedTuple`.
 
 | Key              | Value type | Description                                                                 |
 |:-----------------|:-----------|:----------------------------------------------------------------------------|
@@ -45,76 +29,41 @@ export $(Symbol(alias))
 | :numTimesteps    | Int32      | `[F]` Number of time samples in `data`                                      |
 | :numChannels     | Int32      | `[F]` Number of frequency channels in `data`                                |
 | :startChannel    | Int32      | `[F]` First channel of data is from this fine channel within coarse channel |
-| :data            | (see text) | `[D]` Data array of hit's Filterbank "swatch"                               |
-| :fileindex       | Int64      | `[I]` Word index of hit within hits file                                    |
-| :hostname        | String     | `[G]` Hostname on which the hits file resides                               |
-| :filename        | String     | `[G]` Full path of the hits file                                            |
 
 - `[S]` fields are from the Hit's `signal` field.
 - `[F]` fields are from the Hit's `filterbank` field.
-- `[D]` field  is only present in `HitData*NamedTuple` types.
-- `[I]` field  is only present in `Hit*Index*NamedTuple` types.
-- `[G]` fields is only present in `Hit*GlobalNamedTuple` types.
 
-The `numChannels` and `numTimesteps` fields give the dimensions of the `data`
-field of the `Hit`.  It is possible, though unusual, for the `data` field of the
-`HitData*NamedTuple` to have different dimensions.  The `data` field is a
-`Union{String,Matrix{Float32}}` to allow it to be passed as a `Matrix{Float32}`
-or a `String` (e.g. a base64 encoded `Matrix{Float32}`).
+Example:
+
+    nthit = NamedTuple(hit; fileindex=0; filename="vega.hits")
 """
-const $(Symbol(alias)) = NamedTuple{(
-    # Signal fields
-    :frequency,
-    :index,
-    :driftSteps,
-    :driftRate,
-    :snr,
-    :coarseChannel,
-    :beam,
-    :power,
-    :incoherentPower,
-    # Filterbank fields
-    :sourceName,
-    :fch1,
-    :foff,
-    :tstart,
-    :tsamp,
-    :ra,
-    :dec,
-    :telescopeId,
-    :numTimesteps,
-    :numChannels,
-    :startChannel,
-    $names...
-), Tuple{
-    # Signal fields
-    Float64, # frequency
-    Int32,   # index
-    Int32,   # driftSteps
-    Float64, # driftRate
-    Float32, # snr
-    Int32,   # coarseChannel
-    Int32,   # beam
-    Float32, # power
-    Float32, # incoherentPower
-    # Filterbank fields
-    String,  # sourceName
-    Float64, # fch1
-    Float64, # foff
-    Float64, # tstart
-    Float64, # tsamp
-    Float64, # ra
-    Float64, # dec
-    Int32,   # telescopeId
-    Int32,   # numTimesteps
-    Int32,   # numChannels
-    Int32,   # startChannel
-    $types...
-}}
-
-# Named Tuple constructor
-function Core.NamedTuple(h::Hit, $(map(nt->Meta.parse(join(nt, "::")), zip(names, types))...))::$(Symbol(alias))
-    $(Symbol(alias))((
+function NamedTuple(h::Hit; kwargs...)
+    return NamedTuple{(
+        # Signal fields
+        :frequency,
+        :index,
+        :driftSteps,
+        :driftRate,
+        :snr,
+        :coarseChannel,
+        :beam,
+        :power,
+        :incoherentPower,
+        # Filterbank fields
+        :sourceName,
+        :fch1,
+        :foff,
+        :tstart,
+        :tsamp,
+        :ra,
+        :dec,
+        :telescopeId,
+        :numTimesteps,
+        :numChannels,
+        :startChannel,
+        # Splat in kwarg keys
+        keys(kwargs)...
+    )}((
         # Signal fields
         h.signal.frequency,
         h.signal.index,
@@ -137,11 +86,23 @@ function Core.NamedTuple(h::Hit, $(map(nt->Meta.parse(join(nt, "::")), zip(names
         h.filterbank.numTimesteps,
         h.filterbank.numChannels,
         h.filterbank.startChannel,
-        # Extra fields
-        $(Symbol.(names)...)
+        # Splat in kwarg values
+        values(kwargs)...
     ))
 end
 
-end # @eval
-end # for
-end # let
+# Deprecated old NamedTuple ctors having extra positional parameters
+@deprecate(NamedTuple(hit::Hit, fileindex::Int64),
+           NamedTuple(hit; fileindex))
+@deprecate(NamedTuple(hit::Hit, hostname::String, filename::String),
+           NamedTuple(hit; hostname, filename))
+@deprecate(NamedTuple(hit::Hit, fileindex::Int64, hostname::String, filename::String),
+           NamedTuple(hit; fileindex, hostname, filename))
+@deprecate(NamedTuple(hit::Hit, data::Union{String, Matrix{Float32}}),
+           NamedTuple(hit; data))
+@deprecate(NamedTuple(hit::Hit, data::Union{String, Matrix{Float32}}, fileindex::Int64),
+           NamedTuple(hit; data, fileindex))
+@deprecate(NamedTuple(hit::Hit, data::Union{String, Matrix{Float32}}, hostname::String, filename::String),
+           NamedTuple(hit; data, hostname, filename))
+@deprecate(NamedTuple(hit::Hit, data::Union{String, Matrix{Float32}}, fileindex::Int64, hostname::String, filename::String),
+           NamedTuple(hit; data, fileindex, hostname, filename))

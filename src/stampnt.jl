@@ -1,25 +1,11 @@
-# Stamp NamedTuple types
-
-# This let block defines and exports 8 NamedTuple type aliases for Stamp and
-# defines NamedTuple constructors for them.
-
-let data_field_type = Union{String, Array{Float32,4}}, alias_names_types = (
-    ("StampNamedTuple",                (                                       ), (                                      )),
-    ("StampIndexNamedTuple",           (       :fileindex,                     ), (                 Int64,               )),
-    ("StampDataNamedTuple",            (:data,                                 ), (data_field_type,                      )),
-    ("StampDataIndexNamedTuple",       (:data, :fileindex,                     ), (data_field_type, Int64,               )),
-    ("StampGlobalNamedTuple",          (                   :hostname, :filename), (                        String, String)),
-    ("StampIndexGlobalNamedTuple",     (       :fileindex, :hostname, :filename), (                 Int64, String, String)),
-    ("StampDataGlobalNamedTuple",      (:data,             :hostname, :filename), (data_field_type,        String, String)),
-    ("StampDataIndexGlobalNamedTuple", (:data, :fileindex, :hostname, :filename), (data_field_type, Int64, String, String)),
-)
-
-for (alias, names, types) in alias_names_types
-@eval begin
-export $(Symbol(alias))
+# Construct a NamedTuple from a Stamp
 
 """
-`$($alias)` is a `NamedTuple` type for a `Stamp`.  It contains these keys:
+    NamedTuple(stamp::Stamp; kwargs...)
+
+Construct a `NamedTuple` that is a flattened representation of `stamp`. The keys
+shown in the following table are always included.  Any given `kwargs` will
+be added at the end of the `NamedTuple`.
 
 | Key               | Value type | Note                                                                       |
 |:------------------|:-----------|:---------------------------------------------------------------------------|
@@ -47,85 +33,45 @@ export $(Symbol(alias))
 | :beam             | Int32      | `[S]` Which beam this hit is in (-1 for incoherent beam)                   |
 | :power            | Float32    | `[S]` Total power of the hit (counts)                                      |
 | :incoherentPower  | Float32    | `[S]` Total power of the hit in the incoherent beam (counts) or 0.0        |
-| :data             | (see text) | `[D]` Data array of stamp                                                  |
-| :fileindex        | Int64      | `[I]` Word index of stamp within stamps file                               |
-| :hostname         | String     | `[G]` Hostname on which the stamps file resides                            |
-| :filename         | String     | `[G]` Full path of the stamps file                                         |
 
 - `[S]` fields are from the `signal` field of the highest SNR `Hit` associated
   with this `Stamp`.
-- `[D]` field  is only present in `StampData*NamedTuple` types.
-- `[I]` field  is only present in `Stamp*Index*NamedTuple` types.
-- `[G]` fields is only present in `Stamp*GlobalNamedTuple` types.
 
-The `numAntennas`, `numPolarizations`, `numChannels`, and `numTimesteps` fields
-give the dimensions of the `data` array of the `Stamp`.  It is possible, though
-unusual, for the `data` field of the `StampData*NamedTuple` to have different
-dimensions.  The `data` field is a `Union{String,Array{Float32,4}}` to allow it
-to be passed as an `Array{Float32,4}` or a `String` (e.g. a base64 encoded
-`Array{Float32,4}`).
+Example:
+
+    nthit = NamedTuple(hit; fileindex=0; filename="vega.hits")
 """
-const $(Symbol(alias)) = NamedTuple{(
-    # Stamp fields
-    :seticoreVersion,
-    :sourceName,
-    :ra,
-    :dec,
-    :fch1,
-    :foff,
-    :tstart,
-    :tsamp,
-    :telescopeId,
-    :coarseChannel,
-    :fftSize,
-    :startChannel,
-    :numTimesteps,
-    :numChannels,
-    :numPolarizations,
-    :numAntennas,
-    # Signal fields
-    :frequency,
-    :index,
-    :driftSteps,
-    :driftRate,
-    :snr,
-    :beam,
-    :power,
-    :incoherentPower,
-    $names...
-), Tuple{
-    # Stamp fields
-    String,  # seticoreVersion,
-    String,  # sourceName,
-    Float64, # ra,
-    Float64, # dec,
-    Float64, # fch1,
-    Float64, # foff,
-    Float64, # tstart,
-    Float64, # tsamp,
-    Int32,   # telescopeId,
-    Int32,   # coarseChannel,
-    Int32,   # fftSize,
-    Int32,   # startChannel,
-    Int32,   # numTimesteps,
-    Int32,   # numChannels,
-    Int32,   # numPolarizations,
-    Int32,   # numAntennas,
-    # Signal fields
-    Float64, # frequency
-    Int32,   # index
-    Int32,   # driftSteps
-    Float64, # driftRate
-    Float32, # snr
-    Int32,   # beam
-    Float32, # power
-    Float32, # incoherentPower
-    $types...
-}}
-
-# Named Tuple constructor
-function Core.NamedTuple(s::Stamp, $(map(nt->Meta.parse(join(nt, "::")), zip(names, types))...))::$(Symbol(alias))
-    $(Symbol(alias))((
+function NamedTuple(s::Stamp; kwargs...)
+    return NamedTuple{(
+        # Stamp fields
+        :seticoreVersion,
+        :sourceName,
+        :ra,
+        :dec,
+        :fch1,
+        :foff,
+        :tstart,
+        :tsamp,
+        :telescopeId,
+        :coarseChannel,
+        :fftSize,
+        :startChannel,
+        :numTimesteps,
+        :numChannels,
+        :numPolarizations,
+        :numAntennas,
+        # Signal fields
+        :frequency,
+        :index,
+        :driftSteps,
+        :driftRate,
+        :snr,
+        :beam,
+        :power,
+        :incoherentPower,
+        # Splat in kwarg keys
+        keys(kwargs)...
+    )}((
         # Stamp fields
         s.seticoreVersion,
         s.sourceName,
@@ -152,10 +98,23 @@ function Core.NamedTuple(s::Stamp, $(map(nt->Meta.parse(join(nt, "::")), zip(nam
         s.signal.beam,
         s.signal.power,
         s.signal.incoherentPower,
-        $(Symbol.(names)...)
+        # Splat in kwarg values
+        values(kwargs)...
     ))
 end
 
-end # @eval
-end # for
-end # let
+# Deprecated old NamedTuple ctors having extra positional parameters
+@deprecate(NamedTuple(stamp::Stamp, fileindex::Int64),
+           NamedTuple(stamp; fileindex))
+@deprecate(NamedTuple(stamp::Stamp, hostname::String, filename::String),
+           NamedTuple(stamp; hostname, filename))
+@deprecate(NamedTuple(stamp::Stamp, fileindex::Int64, hostname::String, filename::String),
+           NamedTuple(stamp; fileindex, hostname, filename))
+@deprecate(NamedTuple(stamp::Stamp, data::Union{String, Matrix{Float32}}),
+           NamedTuple(stamp; data))
+@deprecate(NamedTuple(stamp::Stamp, data::Union{String, Matrix{Float32}}, fileindex::Int64),
+           NamedTuple(stamp; data, fileindex))
+@deprecate(NamedTuple(stamp::Stamp, data::Union{String, Matrix{Float32}}, hostname::String, filename::String),
+           NamedTuple(stamp; data, hostname, filename))
+@deprecate(NamedTuple(stamp::Stamp, data::Union{String, Matrix{Float32}}, fileindex::Int64, hostname::String, filename::String),
+           NamedTuple(stamp; data, fileindex, hostname, filename))
