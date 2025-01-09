@@ -72,8 +72,24 @@ end
 Construct a `Signal` from Capnp `words` starting at `widx` using segment indices
 `sidxs`.
 """
-function Signal(words::Vector{UInt64}, widx::Int64, _::Vararg{Int64,N}) where N
+function Signal(words::Vector{UInt64}, widx::Int64, sidxs::Vararg{Int64,N}) where N
     @debug "Signal @$widx"
+
+    # Data can be CapnpStruct or CapnpISP (pointing to a CapnpStruct)
+    # If we have a CapnpISP, we dereference it and pass it, recursively, to
+    # this function.
+    if CapnpPtrEnum(words[widx]&3) == CapnpISP
+        lpsize, segoffset, segid = parseword_isp(words[widx])
+
+        # For now we don't support "double landing pad"
+        @assert lpsize == 0 "double landing pad not supported @$widx"
+
+        # Calculate landing pad index
+        lidx = sidxs[segid+1] + segoffset
+        #@show lidx
+
+        return Signal(words, lidx, sidxs...)
+    end
 
     # A capnp Signal is a struct with up to 6 (supported) words of data and zero
     # pointers
