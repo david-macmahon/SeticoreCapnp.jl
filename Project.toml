@@ -5,9 +5,20 @@ version = "0.12.0"
 
 [deps]
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Mmap = "a63ad114-7e13-5084-954f-fe012c677804"
 PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
 
+[weakdeps]
+Blio = "87855aa7-8b24-49b4-b316-97c011f78d17"
+RadioInterferometry = "d7a65883-3b66-4fe4-a274-f0f417c4cddf"
+
+[extensions]
+GuppiRawSeticoreCapnpExt = ["Blio", "RadioInterferometry"]
+FilterbankSeticoreCapnpExt = "Blio"
+
 [compat]
+Blio = ">=0.3"
 Conda = "1.9.0"
 PyCall = "1.96.1"
+RadioInterferometry = ">=0.3"
