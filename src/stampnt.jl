@@ -90,14 +90,14 @@ function NamedTuple(s::Stamp; kwargs...)
         s.numPolarizations,
         s.numAntennas,
         # Signal fields
-        s.signal.frequency,
-        s.signal.index,
-        s.signal.driftSteps,
-        s.signal.driftRate,
-        s.signal.snr,
-        s.signal.beam,
-        s.signal.power,
-        s.signal.incoherentPower,
+        getmissingfield(s.signal, :frequency),
+        getmissingfield(s.signal, :index),
+        getmissingfield(s.signal, :driftSteps),
+        getmissingfield(s.signal, :driftRate),
+        getmissingfield(s.signal, :snr),
+        getmissingfield(s.signal, :beam),
+        getmissingfield(s.signal, :power),
+        getmissingfield(s.signal, :incoherentPower),
         # Splat in kwarg values
         values(kwargs)...
     ))

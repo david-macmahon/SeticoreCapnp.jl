@@ -22,6 +22,10 @@ function __init__()
     nothing
 end
 
+function getmissingfield(maybemissing, fieldsym)
+    ismissing(maybemissing) ? missing : getfield(maybemissing, fieldsym)
+end
+
 include("hit.jl")
 include("stamp.jl")
 
